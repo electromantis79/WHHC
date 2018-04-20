@@ -6,7 +6,7 @@ from machine import UART
 from os import dupterm
 import time
 import os
-import machine
+import machine, sys
 
 SSID = 'Pi3_AP'
 AUTH = (WLAN.WPA2, 'raspberry')
@@ -16,7 +16,9 @@ uart = UART(0, baudrate=115200)
 
 # duplicate the terminal on the UART
 dupterm(uart)
-print('\nUART initialised')
+print('\nUART initialised\n')
+print('Python version', sys.version)
+print('Unique ID',machine.unique_id())
 
 # login to the local network
 if machine.reset_cause() != machine.SOFT_RESET:
@@ -26,14 +28,25 @@ if machine.reset_cause() != machine.SOFT_RESET:
 	wlan.ifconfig(config='dhcp')
 	wlan.connect(ssid=SSID, auth=AUTH)
 	while not wlan.isconnected():
+		machine.idle()
 		time.sleep_ms(500)
 		print('.', end='')
+		machine.idle()
 	print(' done.\n')
 
-# print
-ip, mask, gateway, dns = wlan.ifconfig()
-print('IP address: ', ip)
-print('Netmask:    ', mask)
-print('Gateway:    ', gateway)
-print('DNS:        ', dns)
-print()
+	ip, mask, gateway, dns = wlan.ifconfig()
+	print('IP address: ', ip)
+	print('Netmask:    ', mask)
+	print('Gateway:    ', gateway)
+	print('DNS:        ', dns)
+	print()
+else:
+	wlan=WLAN()
+	print ('Wireless still connected =', wlan.isconnected(), '\n')
+	if wlan.isconnected():
+		ip, mask, gateway, dns = wlan.ifconfig()
+		print('IP address: ', ip)
+		print('Netmask:    ', mask)
+		print('Gateway:    ', gateway)
+		print('DNS:        ', dns)
+		print()
