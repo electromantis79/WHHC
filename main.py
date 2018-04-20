@@ -1,6 +1,6 @@
 # main.py -- put your code here!
 
-import micropython
+import micropython, math
 from machine import Pin
 import socket, sys, json, select, utime
 
@@ -13,68 +13,64 @@ def decodeBytes(data):
 	return string
 
 def buttonPress(pin):
-	global buttStart, pressStart, currentPin, edge, PinDict, LedDict
+	global longPressStart, receiveStart, pressStart, currentPin, edge, PinDict, LedDict
 	#print (pin.id(), edge)
 	if not edge:
-		buttStart=time.ticks_us()
-		pressStart=time.ticks_ms()
 		edge=1
+		receiveStart=time.ticks_us()
+		pressStart=time.ticks_ms()
+		longPressStart=time.ticks_ms()
 		currentPin=PinDict[pin.id()]
 		#print (pin.id(), edge)
 
-		time.sleep_ms(20)
-		LedDict['P3'].toggle()#PIN_1 =LED_5=topLed=PWM_1[5]
-		LedDict['P15'].toggle()#PIN_13=LED_6=signalLed
+		#time.sleep_ms(50)
+		#LedDict['P19'].toggle()#PIN_1 =LED_5=topLed=PWM_1[5]
+		LedDict['P18'].toggle()#PIN_13=LED_6=signalLed
 		LedDict['P17'].toggle()#PIN_14=LED_4=strengthLedTop
-		LedDict['P18'].toggle()#PIN_15=LED_3=strengthLedMiddleTop
-		LedDict['P19'].toggle()#PIN_16=LED_2=strengthLedMiddleBottom
-		LedDict['P20'].toggle()#PIN_17=LED_1=strengthLedBottom
-		LedDict['P9'].toggle()#PIN_18=LED_7=batteryLed
+		#LedDict['P16'].toggle()#PIN_15=LED_3=strengthLedMiddleTop
+		LedDict['P15'].toggle()#PIN_16=LED_2=strengthLedMiddleBottom
+		LedDict['P14'].toggle()#PIN_17=LED_1=strengthLedBottom
+		#LedDict['P13'].toggle()#PIN_18=LED_7=batteryLed		LED ON EXPANSION BOARD
 
 def buttonRelease(pin):
-	global buttStart, currentPin, edge, PinDict, LedDict
+	global currentPin, edge, PinDict, LedDict
 	if not edge:
 		edge=2
-		buttStart=time.ticks_us()
 		currentPin=PinDict[pin.id()]
-		time.sleep_ms(20)
-		LedDict['P3'].toggle()
-		LedDict['P15'].toggle()
-		LedDict['P17'].toggle()
-		LedDict['P18'].toggle()
-		LedDict['P19'].toggle()
-		LedDict['P20'].toggle()
-		LedDict['P9'].toggle()
+		#time.sleep_ms(20)
+		#LedDict['P19'].toggle()#PIN_1 =LED_5=topLed=PWM_1[5]
+		LedDict['P18'].toggle()#PIN_13=LED_6=signalLed
+		LedDict['P17'].toggle()#PIN_14=LED_4=strengthLedTop
+		#LedDict['P16'].toggle()#PIN_15=LED_3=strengthLedMiddleTop
+		LedDict['P15'].toggle()#PIN_16=LED_2=strengthLedMiddleBottom
+		LedDict['P14'].toggle()#PIN_17=LED_1=strengthLedBottom
+		#LedDict['P13'].toggle()#PIN_18=LED_7=batteryLed		LED ON EXPANSION BOARD
 
 def handleButtonEvent():
-	global buttStart, pressStart, currentPin, edge, PinDictReverse, buttonHeldFlag, longPressFlag, message, KeyDict, rssi
+	global longPressStart, pressStart, currentPin, edge, PinDictReverse, buttonHeldFlag, longPressFlag, message, KeyDict, rssi, buttonPressFlag
 	if edge==1:
 		machine.disable_irq()
 		edge=0
 		buttonHeldFlag=True
 		currentPin=PinDictReverse[currentPin]
-		machine.enable_irq()
 		print (currentPin)
-		buttTime=time.ticks_diff(buttStart, time.ticks_us())
-		#print('PRESSED DOWN', buttTime, 'us  STATE', ButtDict[currentPin].value())
-		#print()
+		message = KeyMapDict[currentPin]
+		buttonPressFlag=True
 		if not ButtDict[currentPin].value():
 			ButtDict[currentPin].callback(trigger=Pin.IRQ_RISING, handler=buttonRelease)
+		machine.enable_irq()
 	elif edge==2:
 		machine.disable_irq()
 		edge=0
 		currentPin=PinDictReverse[currentPin]
-		machine.enable_irq()
-		buttTime=time.ticks_diff(buttStart, time.ticks_us())
 		pressTime=time.ticks_diff(pressStart, time.ticks_ms())
-		#print('		RELEASED', buttTime, 'us  STATE', ButtDict[currentPin].value())
 		print('		PRESS TIME', pressTime, 'ms ')
 		print()
 		buttonHeldFlag=False
 		ButtDict[currentPin].callback(trigger=Pin.IRQ_FALLING, handler=buttonPress)
-		message = KeyMapDict[currentPin]
+		machine.enable_irq()
 
-	if time.ticks_diff(pressStart, time.ticks_ms())>2000 and buttonHeldFlag:
+	if time.ticks_diff(longPressStart, time.ticks_ms())>2000 and buttonHeldFlag:
 		if not longPressFlag:
 			print('LONG PRESS FLAG at 2000ms')
 			rssi=getRssi(currentPin)
@@ -93,8 +89,8 @@ def getRssi(currentPin):
 				print(rssi)
 				return rssi
 
-def checkReceive(receiveStart):
-	global s, HOST, PORT
+def checkReceive():
+	global s, HOST, PORT, receiveStart
 	data=0
 	try:
 		data = s.recv(4096)
@@ -118,21 +114,27 @@ def checkReceive(receiveStart):
 
 	if data:
 		data=decodeBytes(data)
-		loopTime=time.ticks_diff(receiveStart, time.ticks_us())
-		print ('Data Received', data, 'round trip Time', loopTime, 'us')
+		buttTime=time.ticks_diff(receiveStart, time.ticks_us())
+		print ('Data Received', data, 'round trip Time', buttTime, 'us')
 		return data
 
-def sendButtonPress(message):
-	global rssi, s, HOST, PORT
+def sendButtonPress():
+	global rssi, s, HOST, PORT, message, lastMessage, resendFlag, buttonPressFlag
 	if rssi is not None:
 		message=rssi
 		rssi=None
+		buttonPressFlag=True
+	if resendFlag:
+		resendFlag=False
+		message='@'
+		utime.sleep_ms(500)
 	if message:
 		#Send some data to remote server
 		#Connect to remote server
+		lastMessage=message
 		try :
-			#Set the whole string
-			s.sendall(message+'\n')
+			#Send the whole string
+			s.sendall(message)
 			print('Sent', message)
 			#data = s.recv(1024)
 			#print(data)
@@ -145,7 +147,6 @@ def sendButtonPress(message):
 			else:
 				print("sendButtonPress OS error:", err)
 				machine.reset()
-	return message
 
 def connectSocket(HOST, PORT):
 	try:
@@ -169,33 +170,68 @@ def connectSocket(HOST, PORT):
 	print ('Socket Connected to ' + HOST + ' on port ' + str(PORT))
 	return s
 
+def getBatteryVoltage(show=0):
+	'''
+	typedef enum {
+		ADC_ATTEN_0DB = 0,
+		ADC_ATTEN_3DB, // 1
+		ADC_ATTEN_6DB, // 2
+		ADC_ATTEN_12DB, // 3
+		ADC_ATTEN_MAX, // 4
+	} adc_atten_t;
+	'''
+	adc = machine.ADC(0)
+	adcread = adc.channel(attn=2, pin='P16')
+	samplesADC = [0.0]*numADCreadings; meanADC = 0.0
+	i = 0
+	while (i < numADCreadings):
+		adcint = adcread()
+		samplesADC[i] = adcint
+		meanADC += adcint
+		i += 1
+	meanADC /= numADCreadings
+	varianceADC = 0.0
+	for adcint in samplesADC:
+		varianceADC += (adcint - meanADC)**2
+	varianceADC /= (numADCreadings - 1)
+	vbatt=((meanADC/3)*1400/1024)*171/(56*1000)# Vbatt=Vmeasure*((115+56)/56)
+	if show:
+		print("%u ADC readings :\n%s" %(numADCreadings, str(samplesADC)))
+		print("Mean of ADC readings (0-4095) = %15.13f" % meanADC)
+		print("Mean of ADC readings (0-1846 mV) = %15.13f" % ((meanADC)*1846/4096)) # Calabrated manually
+		print("Variance of ADC readings = %15.13f" % varianceADC)
+		print("Standard Deviation of ADC readings = %15.13f" % math.sqrt(varianceADC))
+		print("10**6*Variance/(Mean**2) of ADC readings = %15.13f" % ((varianceADC*10**6)//(meanADC**2)))
+		print("Battery voltage = %15.13f" % (vbatt))
+	return vbatt
+
+numADCreadings = const(100)
 edge=0
 message=0
+lastMessage=0
+buttonPressFlag=0
+resendCounter=0
 rssi=None
 buttonHeldFlag=False
 longPressFlag=False
+resendFlag=False
+receivedLastMessageFlag=False
 pressStart=time.ticks_ms()
+longPressStart=time.ticks_ms()
+receiveStart=time.ticks_us()
 HOST='192.168.10.100'
 PORT=60032
 
-'''
-# Expansion board setup
-PIN_18=LED_7=batteryLed=Pin('GP16', mode=Pin.OUT)
-batteryLed.value(1)
-PIN_5=BUTT_2=strikePlusButt=Pin('GP17', mode=Pin.IN, pull=Pin.PULL_UP)
-#Interrupt
-BUTT_2.irq(trigger=Pin.IRQ_FALLING, handler=buttonPress)
-'''
 # 10-Button Baseball Keypad-------------------------------------------
 
 LedDict={}
-LedDict['P3']=Pin(Pin.exp_board.G24, mode=Pin.OUT) #PIN_1 =LED_5=topLed=PWM_1[5]
-LedDict['P15']=Pin(Pin.exp_board.G0, mode=Pin.OUT)   #PIN_13=LED_6=signalLed
+LedDict['P13']=Pin(Pin.exp_board.G5, mode=Pin.OUT) #PIN_1 =LED_5=topLed=PWM_1[5]
+LedDict['P18']=Pin(Pin.exp_board.G30, mode=Pin.OUT)   #PIN_13=LED_6=signalLed
 LedDict['P17']=Pin(Pin.exp_board.G31, mode=Pin.OUT) #PIN_14=LED_4=strengthLedTop
-LedDict['P18']=Pin(Pin.exp_board.G30, mode=Pin.OUT) #PIN_15=LED_3=strengthLedMiddleTop
-LedDict['P19']=Pin(Pin.exp_board.G6, mode=Pin.OUT)   #PIN_16=LED_2=strengthLedMiddleBottom
-LedDict['P20']=Pin(Pin.exp_board.G7, mode=Pin.OUT)   #PIN_17=LED_1=strengthLedBottom
-LedDict['P9']=Pin(Pin.exp_board.G16, mode=Pin.OUT) #PIN_18=LED_7=batteryLed		LED ON EXPANSION BOARD
+#LedDict['P16']=Pin(Pin.exp_board.G3, mode=Pin.OUT) #PIN_15=LED_3=strengthLedMiddleTop
+LedDict['P15']=Pin(Pin.exp_board.G0, mode=Pin.OUT)   #PIN_16=LED_2=strengthLedMiddleBottom
+LedDict['P14']=Pin(Pin.exp_board.G4, mode=Pin.OUT)   #PIN_17=LED_1=strengthLedBottom
+LedDict['P19']=Pin(Pin.exp_board.G6, mode=Pin.OUT) #PIN_18=LED_7=batteryLed
 import pycom
 pycom.heartbeat(False)
 pycom.rgbled(0xff0000)
@@ -211,13 +247,13 @@ ButtDict={}
 ButtDict['P23']=Pin(Pin.exp_board.G10, mode=Pin.IN, pull=Pin.PULL_UP)#PIN_19=BUTT_0=KEY_10=modeButt
 ButtDict['P11']=Pin(Pin.exp_board.G22, mode=Pin.IN, pull=Pin.PULL_UP)#PIN_4=BUTT_1=KEY_9=outPlusButt=CX_DETECT
 ButtDict['P10']=Pin(Pin.exp_board.G17, mode=Pin.IN, pull=Pin.PULL_UP)#PIN_5=BUTT_2=KEY_8=strikePlusButt==LED2_IN		BUTTON ON EXPANSION BOARD
-ButtDict['P8']=Pin(Pin.exp_board.G15, mode=Pin.IN, pull=Pin.PULL_UP)#PIN_6=BUTT_3=KEY_7=ballPlusButt=PIC_RX2/LED1_IN
-ButtDict['P7']=Pin(Pin.exp_board.G14, mode=Pin.IN, pull=Pin.PULL_UP)#PIN_7=BUTT_4=KEY_6=homeMinusButt=RUN
-ButtDict['P6']=Pin(Pin.exp_board.G13, mode=Pin.IN, pull=Pin.PULL_UP)#PIN_8=BUTT_5=KEY_5=inningPlusButt=STOP
-ButtDict['P5']=Pin(Pin.exp_board.G12, mode=Pin.IN, pull=Pin.PULL_UP)#PIN_9=BUTT_6=KEY_4=guestMinusButt=RUN/STOP CLOCK
-ButtDict['P21']=Pin(Pin.exp_board.G8, mode=Pin.IN, pull=Pin.PULL_UP)#PIN_10=BUTT_7=KEY_3=homePlusButt=RUN/STOP DGT
+ButtDict['P9']=Pin(Pin.exp_board.G16, mode=Pin.IN, pull=Pin.PULL_UP)#PIN_6=BUTT_3=KEY_7=ballPlusButt=PIC_RX2/LED1_IN
+ButtDict['P8']=Pin(Pin.exp_board.G15, mode=Pin.IN, pull=Pin.PULL_UP)#PIN_7=BUTT_4=KEY_6=homeMinusButt=RUN
+ButtDict['P7']=Pin(Pin.exp_board.G14, mode=Pin.IN, pull=Pin.PULL_UP)#PIN_8=BUTT_5=KEY_5=inningPlusButt=STOP
+ButtDict['P6']=Pin(Pin.exp_board.G13, mode=Pin.IN, pull=Pin.PULL_UP)#PIN_9=BUTT_6=KEY_4=guestMinusButt=RUN/STOP CLOCK
+ButtDict['P5']=Pin(Pin.exp_board.G12, mode=Pin.IN, pull=Pin.PULL_UP)#PIN_10=BUTT_7=KEY_3=homePlusButt=RUN/STOP DGT
 ButtDict['P4']=Pin(Pin.exp_board.G11, mode=Pin.IN, pull=Pin.PULL_UP)#PIN_11=BUTT_8=KEY_2=clockToggleButt=RESET 2
-ButtDict['P2']=Pin(Pin.exp_board.G23, mode=Pin.IN, pull=Pin.PULL_UP)#PIN_12=BUTT_9=KEY_1=guestPlusButt=RESET 1
+ButtDict['P3']=Pin(Pin.exp_board.G24, mode=Pin.IN, pull=Pin.PULL_UP)#PIN_12=BUTT_9=KEY_1=guestPlusButt=RESET 1
 ButtPinList=list(ButtDict.keys())
 print('\nButtDict', ButtDict)
 
@@ -237,15 +273,15 @@ for x, y in enumerate(PinRange):
 print('\nPinDictReverse', PinDictReverse)
 
 #Translation dictionary for key names, correct this if pins ever change
-KeyDict={'P23':'KEY_10', 'P11':'KEY_9', 'P10':'KEY_8', 'P4':'KEY_7', \
-'P7':'KEY_6', 'P6':'KEY_5', 'P5':'KEY_4', 'P21':'KEY_3', \
-'P8':'KEY_2', 'P2':'KEY_1'}
+KeyDict={'P23':'KEY_10', 'P11':'KEY_9', 'P10':'KEY_8', 'P9':'KEY_7', \
+'P8':'KEY_6', 'P7':'KEY_5', 'P6':'KEY_4', 'P5':'KEY_3', \
+'P4':'KEY_2', 'P3':'KEY_1'}
 print('\nKeyDict', KeyDict)
 
 #Translation dictionary for key names, correct this if pins ever change
-KeyMapDict={'P23':'E7', 'P11':'D6', 'P10':'D7', 'P4':'B7', \
-'P7':'C6', 'P6':'C7', 'P5':'C8', 'P21':'B6', \
-'P8':'D8', 'P2':'B8'}
+KeyMapDict={'P23':'E7', 'P11':'D6', 'P10':'D7', 'P9':'D8', \
+'P8':'C6', 'P7':'C7', 'P6':'C8', 'P5':'B6', \
+'P4':'B7', 'P3':'B8'}
 print('\nKeyMapDict', KeyMapDict)
 
 #Button Interrupts
@@ -257,12 +293,12 @@ for x in ButtPinList:
 #Create and connect a socket
 s=connectSocket(HOST, PORT)
 
+vbatt=getBatteryVoltage(1)
 
 #MAIN LOOP
 count=0
 wait=1
 while wait:
-	receiveStart=time.ticks_us()
 	loopStart=time.ticks_us()
 	machine.idle()
 
@@ -270,13 +306,63 @@ while wait:
 	handleButtonEvent()
 
 	#Send button press to server
-	message=sendButtonPress(message)
+	sendButtonPress()
 
 	#Check for data
-	data=checkReceive(receiveStart)
+	data=checkReceive()
 
 	#Check effect of received data
+	if data:
+		print('Process', data)
+		if data[0]!='[':
+			dataList=[]
+			for x in range(len(data)):
+				if x%2:
+					dataList.append(data[x-1:x+1])
+				if data[x]=='@':
+					resendFlag=False
+					receivedLastMessageFlag=False
+					buttonPressFlag=False
+					resendCounter=0
+					print(data[x], 'Received')
+			print('dataList', dataList)
+			if dataList:
+				for pair in dataList:
+					print('pair', pair)
+					if pair==lastMessage:
+						print(pair,'acknowledged by server.')
+						receivedLastMessageFlag=True
+					else:
+						if pair=='P1':
+							LedDict['P19'](True)
+						elif pair=='P0':
+							LedDict['P19'](False)
+						elif pair=='T1':
+							pass
+						elif pair=='T0':
+							pass
+						elif pair=='S1':
+							pass
+						elif pair=='S0':
+							pass
+						elif pair=='IB':
+							pass
+						elif pair=='IT':
+							pass
+						else:
+							pass
 
+	if buttonPressFlag:
+		if not receivedLastMessageFlag:
+			if resendCounter>100:
+				resendFlag=True
+				print('Resending Request for Status!')
+			resendCounter+=1
+		else:
+			print('resendCounter canceled at', resendCounter)
+			receivedLastMessageFlag=False
+			buttonPressFlag=False
+			resendCounter=0
 
 	#Check connection to wifi and reconnect
 	if not wlan.isconnected():
