@@ -119,6 +119,30 @@ def sendButtonPress(message, s):
 		message=0
 	return message
 
+def connectSocket():
+	try:
+		#create an AF_INET, STREAM socket (TCP)
+		s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+	except OSError as err:
+		print("OS error: {0}".format(err))
+		print ('Failed to create socket.')
+		sys.exit();
+
+	print ('Socket Created')
+
+	host='192.168.10.100'
+	port=60032
+
+	try:
+		s.connect((host , port))
+		s.setblocking(0)
+	except OSError as err:
+		print("OS error: {0}".format(err))
+		print ('Failed to connect to ' + host)
+		sys.exit();
+
+	print ('Socket Connected to ' + host + ' on port ' + str(port))
+	return s
 
 edge=0
 message=0
@@ -197,29 +221,12 @@ KeyMapDict={'GP4':'E7', 'GP22':'D6', 'GP17':'D7', 'GP11':'B7', \
 for x in ButtPinList:
 	ButtDict[x].irq(trigger=Pin.IRQ_FALLING, handler=buttonPress)
 
-try:
-	#create an AF_INET, STREAM socket (TCP)
-	s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-except OSError as err:
-	print("OS error: {0}".format(err))
-	print ('Failed to create socket.')
-	sys.exit();
+#Initalize
 
-print ('Socket Created')
+#Create and connect a socket
+s=connectSocket()
 
-host='192.168.1.100'
-port=60032
 
-try:
-	s.connect((host , port))
-	s.setblocking(0)
-except OSError as err:
-	print("OS error: {0}".format(err))
-	print ('Failed to connect to ' + host)
-	sys.exit();
-
-print ('Socket Connected to ' + host + ' on port ' + str(port))
-#poller=select.poll()
 #MAIN LOOP
 count=0
 wait=1
@@ -239,7 +246,15 @@ while wait:
 
 	#Check effect of received data
 
-
+	#Check connection to wifi and reconnect
+	if not wlan.isconnected():
+		print ('Lost wifi connection to ' + host)
+		sys.exit();
+		#wlan.connect(ssid=SSID, auth=AUTH)
+		#s.close()
+		#while not wlan.isconnected():
+		#	machine.idle()
+		#s=connectSocket()
 
 	'''
 	loopTime=time.ticks_diff(loopStart, time.ticks_us())
