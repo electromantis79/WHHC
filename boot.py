@@ -17,13 +17,14 @@ uart = UART(0, baudrate=115200)
 # duplicate the terminal on the UART
 dupterm(uart)
 print('\nUART initialised\n')
-print('Python version', sys.version)
+print (os.uname())
+print('\nPython version', sys.version)
 print('Unique ID',machine.unique_id())
 
 # login to the local network
 if machine.reset_cause() != machine.SOFT_RESET:
 	print('Initialising WLAN in station mode...', end=' ')
-	wlan = WLAN(0,WLAN.STA)
+	wlan = WLAN(mode=WLAN.STA)
 	wlan.ifconfig(config='dhcp')
 	print('done.\nConnecting to WiFi network...', end='')
 	wlan.connect(ssid=SSID, auth=AUTH)
