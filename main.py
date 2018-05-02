@@ -219,7 +219,7 @@ receivedLastMessageFlag=False
 pressStart=time.ticks_ms()
 longPressStart=time.ticks_ms()
 receiveStart=time.ticks_us()
-HOST='192.168.10.100'
+HOST='192.168.8.1'
 PORT=60032
 
 # 10-Button Baseball Keypad-------------------------------------------
