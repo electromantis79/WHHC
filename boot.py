@@ -25,7 +25,7 @@ print('Unique ID',machine.unique_id())
 if machine.reset_cause() != machine.SOFT_RESET:
 	print('Initialising WLAN in station mode...', end=' ')
 	wlan = WLAN(mode=WLAN.STA)
-	wlan.ifconfig(config='dhcp')
+	wlan.ifconfig(config=('192.168.8.145', '255.255.255.0', '192.168.8.1', '8.8.8.8'))
 	print('done.\nConnecting to WiFi network...', end='')
 	wlan.connect(ssid=SSID, auth=AUTH)
 	while not wlan.isconnected():
