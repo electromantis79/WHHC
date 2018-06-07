@@ -43,10 +43,7 @@ rssi = None
 SearchTimeoutDuration = 8
 LongPressTimeoutDuration = 2.5
 PowerOffSequenceFlag = False
-
-
-# Start Ignoring Buttons
-machine.disable_irq()
+PowerOnSequenceFlag = True
 
 # 10-Button Baseball Keypad
 LedDict = {}
@@ -121,8 +118,12 @@ for x in ButtPinList:
 sleep_mode_timer = Timer.Chrono()
 long_press_timer = Timer.Chrono()
 power_off_seq_timer = Timer.Chrono()
+power_on_seq_timer = Timer.Chrono()
 
-# TODO Power On Test Sequence of LED Indicators
+power_on_seq_timer.start()
+while PowerOnSequenceFlag:
+	power_on_seq_timer, PowerOnSequenceFlag = led_seq.power_on_sequence(power_on_seq_timer, PowerOnSequenceFlag)
+	time.sleep_ms(50)
 
 # END Boot Up Mode ========================
 
@@ -131,8 +132,9 @@ print('\n======== BEGIN Search Mode ========\n')
 
 # Search Mode ------------------------------
 
-# Stop Ignoring Buttons
-machine.enable_irq()
+# Clear any button presses
+for button in ButtEventDict:
+	ButtEventDict[button] = 0
 
 if machine.reset_cause() != machine.SOFT_RESET:
 	print('Initialising WLAN in station mode...', end=' ')
@@ -144,6 +146,10 @@ if machine.reset_cause() != machine.SOFT_RESET:
 	while 1 or not wlan.isconnected():
 		machine.idle()
 		#print('.', end='')
+
+		# LED Sequences
+		power_off_seq_timer, PowerOffSequenceFlag = led_seq.power_off_sequence(power_off_seq_timer, PowerOffSequenceFlag)
+
 		time.sleep_ms(50)
 
 		# Sleep Mode Timer Check
@@ -152,9 +158,6 @@ if machine.reset_cause() != machine.SOFT_RESET:
 			sleep_mode_timer.stop()
 			sleep_mode_timer.reset()
 			# ENTER Sleep Mode
-
-		# LED Sequences
-		power_off_seq_timer, PowerOffSequenceFlag = led_seq.power_off_sequence(power_off_seq_timer, PowerOffSequenceFlag)
 
 		if not PowerOffSequenceFlag:
 			# Handle button presses
