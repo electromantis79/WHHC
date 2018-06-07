@@ -1,69 +1,24 @@
 # boot.py -- run on boot-up
 # can run arbitrary Python, but best to keep it minimal
 
-from network import WLAN
+# BEGIN Boot Up Mode ===============================
+
+import os
+import machine
+import sys
+
 from machine import UART
 from os import dupterm
-import time
-import os
-import machine, sys
-
-SSID = 'ScoreNet'
-AUTH = (WLAN.WPA2, 'centari008')
 
 # enable the UART on the USB-to-serial port
 uart = UART(0, baudrate=115200)
 
 # duplicate the terminal on the UART
 dupterm(uart)
-print('\nUART initialised\n')
-print (os.uname())
+
+print('\nUART initialised')
+print('\n======== BEGIN Boot Up Mode ========\n')
+
+print(os.uname())
 print('\nPython version', sys.version)
-print('Unique ID',machine.unique_id())
-
-# login to the local network
-if machine.reset_cause() != machine.SOFT_RESET:
-	print('Initialising WLAN in station mode...', end=' ')
-	wlan = WLAN(mode=WLAN.STA)
-	wlan.ifconfig(config=('192.168.8.145', '255.255.255.0', '192.168.8.1', '8.8.8.8'))
-	print('done.\nConnecting to WiFi network...', end='')
-	wlan.connect(ssid=SSID, auth=AUTH)
-	while not wlan.isconnected():
-		machine.idle()
-		time.sleep_ms(500)
-		print('.', end='')
-		machine.idle()
-	print(' done.\n')
-
-	ip, mask, gateway, dns = wlan.ifconfig()
-	print('IP address: ', ip)
-	print('Netmask:    ', mask)
-	print('Gateway:    ', gateway)
-	print('DNS:        ', dns)
-	print()
-else:
-	wlan=WLAN()
-	print ('Wireless still connected =', wlan.isconnected(), '\n')
-	if wlan.isconnected():
-		ip, mask, gateway, dns = wlan.ifconfig()
-		print('IP address: ', ip)
-		print('Netmask:    ', mask)
-		print('Gateway:    ', gateway)
-		print('DNS:        ', dns)
-		print()
-	else:
-		print('Connecting to WiFi network...', end='')
-		wlan.connect(ssid=SSID, auth=AUTH)
-		while not wlan.isconnected():
-			machine.idle()
-			time.sleep_ms(500)
-			print('.', end='')
-			machine.idle()
-
-		ip, mask, gateway, dns = wlan.ifconfig()
-		print(' done.\n')
-		print('IP address: ', ip)
-		print('Netmask:    ', mask)
-		print('Gateway:    ', gateway)
-		print('DNS:        ', dns)
-		print()
+print('Unique ID', machine.unique_id(), 'Frequency', machine.freq())

@@ -6,14 +6,11 @@ import sys
 import time
 import pycom
 
+from network import WLAN
 from machine import Pin
+from machine import Timer
 from utils import *
-
-
-# Constants
-HOST = '192.168.8.1'
-PORT = 60032
-
+from led_sequences import LedSequences
 
 def button_event(pin):  # Pin Callback
 	global ButtEventDict
@@ -31,10 +28,25 @@ def button_event(pin):  # Pin Callback
 		#print('ButtEventDict[pin.id()]', last_state)
 
 
+# Initialize ---------------------------------------------------
+
+# Constants
+HOST = '192.168.8.1'
+PORT = 60032
+SSID = 'ScoreNet'
+AUTH = (WLAN.WPA2, 'centari008')
+
 # Variables -------------------------------------------------------------
 
 message = None
 rssi = None
+SearchTimeoutDuration = 8
+LongPressTimeoutDuration = 2.5
+PowerOffSequenceFlag = False
+
+
+# Start Ignoring Buttons
+machine.disable_irq()
 
 # 10-Button Baseball Keypad
 LedDict = {}
@@ -53,6 +65,8 @@ print('\nLedDict', LedDict)
 # Turn all off
 for x in LedPinList:
 	LedDict[x].value(False)
+
+led_seq = LedSequences(LedDict)
 
 ButtDict = {}
 ButtDict['P23'] = Pin(Pin.exp_board.G10, mode=Pin.IN, pull=Pin.PULL_UP)  # PIN_19 = BUTT_0 = KEY_10 = modeButt
@@ -103,7 +117,124 @@ print('\nKeyMapDict', KeyMapDict)
 for x in ButtPinList:
 	ButtDict[x].callback(trigger=Pin.IRQ_FALLING | Pin.IRQ_RISING, handler=button_event)
 
-# Initialize ---------------------------------------------------
+# Timers
+sleep_mode_timer = Timer.Chrono()
+long_press_timer = Timer.Chrono()
+power_off_seq_timer = Timer.Chrono()
+
+# TODO Power On Test Sequence of LED Indicators
+
+# END Boot Up Mode ========================
+
+print('\n======== END Boot Up Mode ========')
+print('\n======== BEGIN Search Mode ========\n')
+
+# Search Mode ------------------------------
+
+# Stop Ignoring Buttons
+machine.enable_irq()
+
+if machine.reset_cause() != machine.SOFT_RESET:
+	print('Initialising WLAN in station mode...', end=' ')
+	wlan = WLAN(mode=WLAN.STA)
+	wlan.ifconfig(config=('192.168.8.145', '255.255.255.0', '192.168.8.1', '8.8.8.8'))
+	print('done.\nConnecting to WiFi network...', end='')
+	wlan.connect(ssid=SSID, auth=AUTH)
+	sleep_mode_timer.start()
+	while 1 or not wlan.isconnected():
+		machine.idle()
+		#print('.', end='')
+		time.sleep_ms(50)
+
+		# Sleep Mode Timer Check
+		if sleep_mode_timer.read() > SearchTimeoutDuration:
+			print('\nsleep_mode_timer triggered at ', sleep_mode_timer.read(), 's.')
+			sleep_mode_timer.stop()
+			sleep_mode_timer.reset()
+			# ENTER Sleep Mode
+
+		# LED Sequences
+		power_off_seq_timer, PowerOffSequenceFlag = led_seq.power_off_sequence(power_off_seq_timer, PowerOffSequenceFlag)
+
+		if not PowerOffSequenceFlag:
+			# Handle button presses
+			for button in ButtEventDict:
+				if ButtEventDict[button] == 1:
+					# Down Press
+					print('\nDown Press', button)
+					ButtEventDict[button] = 2
+					if button == 'P23':
+						# MODE button
+						long_press_timer.start()
+						sleep_mode_timer.stop()
+						sleep_mode_timer.reset()
+						# ENTER Search Battery Test Mode
+						print('\nENTER Search Battery Test Mode')
+					else:
+						# Any other button
+						print('sleep_mode_timer', sleep_mode_timer.read(), 's.')
+						sleep_mode_timer.reset()
+						print('sleep_mode_timer after reset', sleep_mode_timer.read(), 's.')
+
+				elif ButtEventDict[button] == 3:
+					# Up Press
+					print('\nUp Press', button)
+					ButtEventDict[button] = 0
+					if button == 'P23':
+						# MODE button
+						if long_press_timer.read() > LongPressTimeoutDuration:
+							print('\nLong press detected at', long_press_timer.read(), 's.')
+							long_press_timer.stop()
+							long_press_timer.reset()
+							# ENTER Sleep Mode with Power Off Sequence
+							print('\nENTER Sleep Mode with Power Off Sequence\n')
+							PowerOffSequenceFlag = True
+							power_off_seq_timer.start()
+						else:
+							long_press_timer.stop()
+							print('\nLong press NOT detected at', long_press_timer.read(), 's.')
+							long_press_timer.reset()
+					else:
+						# Any other button
+						print('sleep_mode_timer', sleep_mode_timer.read(), 's.')
+						sleep_mode_timer.reset()
+						print('sleep_mode_timer after reset', sleep_mode_timer.read(), 's.')
+
+	print(' done.\n')
+
+	ip, mask, gateway, dns = wlan.ifconfig()
+	print('IP address: ', ip)
+	print('Netmask:    ', mask)
+	print('Gateway:    ', gateway)
+	print('DNS:        ', dns)
+	print()
+else:
+	# machine.SOFT_RESET
+
+	wlan = WLAN()
+	print('Wireless still connected =', wlan.isconnected(), '\n')
+	if wlan.isconnected():
+		ip, mask, gateway, dns = wlan.ifconfig()
+		print('IP address: ', ip)
+		print('Netmask:    ', mask)
+		print('Gateway:    ', gateway)
+		print('DNS:        ', dns)
+		print()
+	else:
+		print('Connecting to WiFi network...', end='')
+		wlan.connect(ssid=SSID, auth=AUTH)
+		while not wlan.isconnected():
+			machine.idle()
+			time.sleep_ms(500)
+			print('.', end='')
+
+		ip, mask, gateway, dns = wlan.ifconfig()
+		print(' done.\n')
+		print('IP address: ', ip)
+		print('Netmask:    ', mask)
+		print('Gateway:    ', gateway)
+		print('DNS:        ', dns)
+		print()
 
 # Change LED from flashing blue default to solid red
 pycom.heartbeat(False)
