@@ -47,6 +47,8 @@ PowerOffSequenceFlag = False
 PowerOnSequenceFlag = True
 SearchBatteryTestModeFlag = False
 ReceiverDiscoveredFlag = False
+TransferFilesFlag = False
+TransferFilesCompleteFlag = False
 mode = 'SearchModes'
 
 # LED definitions
@@ -316,15 +318,32 @@ while 1:
 
 	elif mode == 'DiscoveredMode':
 		ReceiverDiscoveredFlag = led_sequence.receiver_discovered(ReceiverDiscoveredFlag)
+
 		if not ReceiverDiscoveredFlag:
-			mode = 'TransferMode'
-			print('\n======== END Discovered Mode ========\n')
-			print('\n======== BEGIN Transfer Mode ========\n')
+			if TransferFilesFlag:
+				TransferFilesFlag = False
+				mode = 'TransferMode'
+				print('\n======== END Discovered Mode ========\n')
+				print('\n======== BEGIN Transfer Mode ========\n')
+				# TODO: add thread here to transfer file with TransferFilesCompleteFlag
+			else:
+				mode = 'ConnectedMode'
+				print('\n======== END Discovered Mode ========\n')
+				print('\n======== BEGIN Connected Modes ========\n')
 
 	elif mode == 'TransferMode':
-		mode = 'ConnectedMode'
-		print('\n======== END Transfer Mode ========\n')
-		print('\n======== BEGIN Connected Modes ========\n')
+		led_sequence.file_transfer(1)
+		# TODO: should this sequence finish one cycle before moving on?
+
+		if TransferFilesCompleteFlag and led_sequence.transfer_cycle_flag:
+			TransferFilesCompleteFlag = False
+			led_sequence.transfer_cycle_flag = False
+			led_sequence.timer.stop()
+			led_sequence.timer.reset()
+
+			mode = 'ConnectedMode'
+			print('\n======== END Transfer Mode ========\n')
+			print('\n======== BEGIN Connected Modes ========\n')
 
 	elif mode == 'ConnectedMode':
 

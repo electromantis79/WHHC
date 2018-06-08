@@ -7,6 +7,7 @@ class LedSequences(object):
 	def __init__(self, led_dict):
 		self.LedDict = led_dict
 		self.timer = Timer.Chrono()
+		self.transfer_cycle_flag = False
 	
 	def power_on(self, enable=False):
 		"""ONE SHOT - Self Stop"""
@@ -155,7 +156,7 @@ class LedSequences(object):
 		return enable
 
 	def file_transfer(self, enable=False):
-		"""Repeat toggle the [Signal Strength] and [Bar 4] LEDs until transfer is complete"""
+		"""Repeat toggle the [Signal Strength] and [Bar 4] LEDs for one cycle or until transfer is complete"""
 		if enable:
 			read = self.timer.read_ms()
 			if 0 <= read < 250:
@@ -166,9 +167,11 @@ class LedSequences(object):
 				print('[Bar 4] = ON', read, 'ms')
 			elif 500 <= read < 750:
 				print('[Signal Strength] = OFF', read, 'ms')
-			elif 750 <= read:
+			elif 750 <= read < 1000:
 				print('[Bar 4] = OFF', read, 'ms')
+			elif 1000 <= read:
 				self.timer.reset()
+				self.transfer_cycle_flag = True
 				print('file_transfer_sequence END')
 		return enable
 
