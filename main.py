@@ -1,6 +1,5 @@
 # main.py -- put your code here!
 
-import micropython
 import machine
 import sys
 import time
@@ -12,20 +11,21 @@ from machine import Timer
 from utils import *
 from led_sequences import LedSequences
 
+
 def button_event(pin):  # Pin Callback
 	global ButtEventDict
 	if pin.id() in ButtEventDict:
 		last_state = ButtEventDict[pin.id()]
 		# Down press = 1, Up press = 2
-		#print('---------------------------', pin.id(), pin())
-		#print('ButtEventDict[pin.id()]', last_state)
+		# print('---------------------------', pin.id(), pin())
+		# print('ButtEventDict[pin.id()]', last_state)
 		if last_state == 0 and pin() == 0:
 			last_state = 1
 		elif last_state == 2 and pin() == 1:
 			last_state = 3
 
 		ButtEventDict[pin.id()] = last_state
-		#print('ButtEventDict[pin.id()]', last_state)
+		# print('ButtEventDict[pin.id()]', last_state)
 
 
 # Initialize ---------------------------------------------------
@@ -45,7 +45,7 @@ LongPressTimeoutDuration = 2.5
 PowerOffSequenceFlag = False
 PowerOnSequenceFlag = True
 
-# 10-Button Baseball Keypad
+# LED definitions
 LedDict = {}
 LedDict['P13'] = Pin(Pin.exp_board.G5, mode=Pin.OUT)  # PIN_1  = LED_5 = topLed = PWM_1[5]
 LedDict['P18'] = Pin(Pin.exp_board.G30, mode=Pin.OUT)  # PIN_13 = LED_6 = signalLed
@@ -55,7 +55,7 @@ LedDict['P15'] = Pin(Pin.exp_board.G0, mode=Pin.OUT)   # PIN_16 = LED_2 = streng
 LedDict['P14'] = Pin(Pin.exp_board.G4, mode=Pin.OUT)   # PIN_17 = LED_1 = strengthLedBottom
 LedDict['P19'] = Pin(Pin.exp_board.G6, mode=Pin.OUT)  # PIN_18 = LED_7 = batteryLed
 
-#LedDict['P2'] = Pin(Pin.module.P2, mode = Pin.OUT)#WiPy Heartbeat pin
+# LedDict['P2'] = Pin(Pin.module.P2, mode = Pin.OUT)#WiPy Heartbeat pin
 LedPinList = list(LedDict.keys())
 print('\nLedDict', LedDict)
 
@@ -63,19 +63,32 @@ print('\nLedDict', LedDict)
 for x in LedPinList:
 	LedDict[x].value(False)
 
-led_seq = LedSequences(LedDict)
+led_sequence = LedSequences(LedDict)
 
+# 10-Button Baseball Keypad
 ButtDict = {}
-ButtDict['P23'] = Pin(Pin.exp_board.G10, mode=Pin.IN, pull=Pin.PULL_UP)  # PIN_19 = BUTT_0 = KEY_10 = modeButt
-ButtDict['P11'] = Pin(Pin.exp_board.G22, mode=Pin.IN, pull=Pin.PULL_UP)  # PIN_4 = BUTT_1 = KEY_9 = outPlusButt = CX_DETECT
-ButtDict['P10'] = Pin(Pin.exp_board.G17, mode=Pin.IN, pull=Pin.PULL_UP)  # PIN_5 = BUTT_2 = KEY_8 = strikePlusButt =  = LED2_IN		BUTTON ON EXPANSION BOARD
-ButtDict['P9'] = Pin(Pin.exp_board.G16, mode=Pin.IN, pull=Pin.PULL_UP)  # PIN_6 = BUTT_3 = KEY_7 = ballPlusButt = PIC_RX2/LED1_IN
-ButtDict['P8'] = Pin(Pin.exp_board.G15, mode=Pin.IN, pull=Pin.PULL_UP)  # PIN_7 = BUTT_4 = KEY_6 = homeMinusButt = RUN
-ButtDict['P7'] = Pin(Pin.exp_board.G14, mode=Pin.IN, pull=Pin.PULL_UP)  # PIN_8 = BUTT_5 = KEY_5 = inningPlusButt = STOP
-ButtDict['P6'] = Pin(Pin.exp_board.G13, mode=Pin.IN, pull=Pin.PULL_UP)  # PIN_9 = BUTT_6 = KEY_4 = guestMinusButt = RUN/STOP CLOCK
-ButtDict['P5'] = Pin(Pin.exp_board.G12, mode=Pin.IN, pull=Pin.PULL_UP)  # PIN_10 = BUTT_7 = KEY_3 = homePlusButt = RUN/STOP DGT
-ButtDict['P4'] = Pin(Pin.exp_board.G11, mode=Pin.IN, pull=Pin.PULL_UP)  # PIN_11 = BUTT_8 = KEY_2 = clockToggleButt = RESET 2
-ButtDict['P3'] = Pin(Pin.exp_board.G24, mode=Pin.IN, pull=Pin.PULL_UP)  # PIN_12 = BUTT_9 = KEY_1 = guestPlusButt = RESET 1
+ButtDict['P23'] = Pin(
+	Pin.exp_board.G10, mode=Pin.IN, pull=Pin.PULL_UP)  # PIN_19 = BUTT_0 = KEY_10 = modeButt
+ButtDict['P11'] = Pin(
+	Pin.exp_board.G22, mode=Pin.IN, pull=Pin.PULL_UP)  # PIN_4 = BUTT_1 = KEY_9 = outPlusButt = CX_DETECT
+ButtDict['P10'] = Pin(
+	Pin.exp_board.G17, mode=Pin.IN, pull=Pin.PULL_UP)  # PIN_5 = BUTT_2 = KEY_8 = strikePlusButt =  = LED2_IN
+# BUTTON ON EXPANSION BOARD
+
+ButtDict['P9'] = Pin(
+	Pin.exp_board.G16, mode=Pin.IN, pull=Pin.PULL_UP)  # PIN_6 = BUTT_3 = KEY_7 = ballPlusButt = PIC_RX2/LED1_IN
+ButtDict['P8'] = Pin(
+	Pin.exp_board.G15, mode=Pin.IN, pull=Pin.PULL_UP)  # PIN_7 = BUTT_4 = KEY_6 = homeMinusButt = RUN
+ButtDict['P7'] = Pin(
+	Pin.exp_board.G14, mode=Pin.IN, pull=Pin.PULL_UP)  # PIN_8 = BUTT_5 = KEY_5 = inningPlusButt = STOP
+ButtDict['P6'] = Pin(
+	Pin.exp_board.G13, mode=Pin.IN, pull=Pin.PULL_UP)  # PIN_9 = BUTT_6 = KEY_4 = guestMinusButt = RUN/STOP CLOCK
+ButtDict['P5'] = Pin(
+	Pin.exp_board.G12, mode=Pin.IN, pull=Pin.PULL_UP)  # PIN_10 = BUTT_7 = KEY_3 = homePlusButt = RUN/STOP DGT
+ButtDict['P4'] = Pin(
+	Pin.exp_board.G11, mode=Pin.IN, pull=Pin.PULL_UP)  # PIN_11 = BUTT_8 = KEY_2 = clockToggleButt = RESET 2
+ButtDict['P3'] = Pin(
+	Pin.exp_board.G24, mode=Pin.IN, pull=Pin.PULL_UP)  # PIN_12 = BUTT_9 = KEY_1 = guestPlusButt = RESET 1
 ButtPinList = list(ButtDict.keys())
 print('\nButtDict', ButtDict, '\nButtPinList', ButtPinList)
 
@@ -117,25 +130,25 @@ for x in ButtPinList:
 # Timers
 sleep_mode_timer = Timer.Chrono()
 long_press_timer = Timer.Chrono()
-power_off_seq_timer = Timer.Chrono()
-power_on_seq_timer = Timer.Chrono()
 
-power_on_seq_timer.start()
+# LED Power On Sequence
+led_sequence.timer.start()
 while PowerOnSequenceFlag:
-	power_on_seq_timer, PowerOnSequenceFlag = led_seq.power_on_sequence(power_on_seq_timer, PowerOnSequenceFlag)
+	PowerOnSequenceFlag = led_sequence.power_on(PowerOnSequenceFlag)
 	time.sleep_ms(50)
 
-# END Boot Up Mode ========================
+# END Boot Up Mode -----------------------
 
 print('\n======== END Boot Up Mode ========')
 print('\n======== BEGIN Search Mode ========\n')
 
-# Search Mode ------------------------------
+# Search Mode ============================
 
 # Clear any button presses
 for button in ButtEventDict:
 	ButtEventDict[button] = 0
 
+# Wifi connection
 if machine.reset_cause() != machine.SOFT_RESET:
 	print('Initialising WLAN in station mode...', end=' ')
 	wlan = WLAN(mode=WLAN.STA)
@@ -148,7 +161,7 @@ if machine.reset_cause() != machine.SOFT_RESET:
 		#print('.', end='')
 
 		# LED Sequences
-		power_off_seq_timer, PowerOffSequenceFlag = led_seq.power_off_sequence(power_off_seq_timer, PowerOffSequenceFlag)
+		PowerOffSequenceFlag = led_sequence.power_off(PowerOffSequenceFlag)
 
 		time.sleep_ms(50)
 
@@ -192,7 +205,7 @@ if machine.reset_cause() != machine.SOFT_RESET:
 							# ENTER Sleep Mode with Power Off Sequence
 							print('\nENTER Sleep Mode with Power Off Sequence\n')
 							PowerOffSequenceFlag = True
-							power_off_seq_timer.start()
+							led_sequence.timer.start()
 						else:
 							long_press_timer.stop()
 							print('\nLong press NOT detected at', long_press_timer.read(), 's.')
@@ -239,9 +252,6 @@ else:
 		print('DNS:        ', dns)
 		print()
 
-# Change LED from flashing blue default to solid red
-pycom.heartbeat(False)
-pycom.rgbled(0xff0000)
 
 # Create and connect a socket
 sock = connect_socket(HOST, PORT)
@@ -249,9 +259,14 @@ sock = connect_socket(HOST, PORT)
 # Test voltage sense function
 vbatt = get_battery_voltage(1)
 
+# Test rssi
 rssi = get_rssi(wlan)
 
-# MAIN LOOP
+# Change LED from flashing blue default to solid red
+pycom.heartbeat(False)
+pycom.rgbled(0xff0000)
+
+# Connected loop
 count = 0
 wait = 1
 while wait:
