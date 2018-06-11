@@ -40,10 +40,11 @@ AUTH = (WLAN.WPA2, 'centari008')
 
 message = None
 rssi = None
-SearchTimeoutDuration = 8
+SearchTimeoutDuration = 20
 BatteryTimeoutDuration = 3
 LongPressTimeoutDuration = 2.5
-PowerOffSequenceFlag = False
+MainLoopFrequencyMs = 50
+PowerOffSequenceFlag = True
 PowerOnSequenceFlag = True
 SearchBatteryTestModeFlag = False
 ReceiverDiscoveredFlag = False
@@ -133,10 +134,38 @@ print('\nKeyMapDict', KeyMapDict)
 for x in ButtPinList:
 	ButtDict[x].callback(trigger=Pin.IRQ_FALLING | Pin.IRQ_RISING, handler=button_event)
 
+machine.pin_deepsleep_wakeup(['P23'], machine.WAKEUP_ALL_LOW, enable_pull=True)
+
 # Timers
 search_mode_timer = Timer.Chrono()
 battery_mode_timer = Timer.Chrono()
 long_press_timer = Timer.Chrono()
+
+if machine.reset_cause() == machine.DEEPSLEEP_RESET:
+	# sleep if button not being held then continue on release
+	print('Return from DEEP SLEEP')
+	if not ButtDict['P23'].value():
+		button = 'P23'
+		ButtEventDict[button] = 1
+	else:
+		print('ENTER deep sleep AGAIN\n')
+		machine.deepsleep()
+
+	while 1:
+		machine.idle()
+		time.sleep_ms(50)
+
+		if ButtEventDict[button] == 1:
+			# Down Press
+			print('\nDown Press', button)
+			ButtEventDict[button] = 2
+
+		elif ButtEventDict[button] == 3:
+			# Up Press
+			print('\nUp Press', button)
+			ButtEventDict[button] = 0
+			print('\nRECOVER from Sleep Mode\n')
+			break
 
 # Test voltage sense function
 vbatt = get_battery_voltage(1)
@@ -145,6 +174,7 @@ vbatt = get_battery_voltage(1)
 led_sequence.timer.start()
 while PowerOnSequenceFlag:
 	PowerOnSequenceFlag = led_sequence.power_on(PowerOnSequenceFlag)
+	machine.idle()
 	time.sleep_ms(50)
 
 # Clear any button presses
@@ -165,17 +195,17 @@ print('\n======== BEGIN Search Mode ========\n')
 mode = 'SearchModes'
 
 # Wifi connection
-if machine.reset_cause() != machine.SOFT_RESET:
+if machine.reset_cause() == machine.SOFT_RESET:
+	print('Return from SOFT RESET')
+	wlan = WLAN()
+	print('Wireless still connected =', wlan.isconnected(), '\n')
+
+else:
 	print('Initialising WLAN in station mode...', end=' ')
 	wlan = WLAN(mode=WLAN.STA)
 	wlan.ifconfig(config=('192.168.8.145', '255.255.255.0', '192.168.8.1', '8.8.8.8'))
 	print('done.\nConnecting to WiFi network...')
 	wlan.connect(ssid=SSID, auth=AUTH)
-
-else:
-	# machine.SOFT_RESET
-	wlan = WLAN()
-	print('Wireless still initialized =', wlan.isconnected(), '\n')
 
 search_mode_timer.start()
 led_sequence.timer.start()
@@ -185,7 +215,7 @@ print('\n====== ENTERING MAIN LOOP ======')
 # MAIN loop
 while 1:
 	machine.idle()
-	time.sleep_ms(50)
+	time.sleep_ms(MainLoopFrequencyMs)
 
 	if mode == 'BootUp':
 		PowerOnSequenceFlag = led_sequence.power_on(PowerOnSequenceFlag)
@@ -197,7 +227,6 @@ while 1:
 	elif mode == 'SearchModes':
 
 		# LED Sequences
-		PowerOffSequenceFlag = led_sequence.power_off(PowerOffSequenceFlag)
 		led_sequence.searching_for_receiver(not SearchBatteryTestModeFlag)
 		led_sequence.battery_test(SearchBatteryTestModeFlag)
 
@@ -206,7 +235,9 @@ while 1:
 			print('\nsearch_mode_timer triggered at ', search_mode_timer.read(), 's.')
 			search_mode_timer.stop()
 			search_mode_timer.reset()
-		# ENTER Sleep Mode
+			# ENTER Sleep Mode
+			print('ENTER deep sleep\n')
+			machine.deepsleep()
 
 		# Battery Mode Timer Check
 		if battery_mode_timer.read() > BatteryTimeoutDuration:
@@ -219,78 +250,78 @@ while 1:
 			print('\n======== END Search Battery Test Mode ========\n')
 			print('\n======== BEGIN Search Mode ========\n')
 
-		if not PowerOffSequenceFlag:
-			# Handle button presses
-			for button in ButtEventDict:
-				if ButtEventDict[button] == 1:
-					# Down Press
-					print('\nDown Press', button)
-					ButtEventDict[button] = 2
-					if button == 'P23':
-						# MODE button
-						long_press_timer.start()
-						search_mode_timer.stop()
-						search_mode_timer.reset()
-						# TOGGLE Search Mode and Search Battery Test Mode
-						if not SearchBatteryTestModeFlag:
-							print('\nENTER Search Battery Test Mode')
-							SearchBatteryTestModeFlag = True
-							battery_mode_timer.start()
-							led_sequence.timer.stop()
-							led_sequence.timer.reset()
-							print('\n======== END Search Mode ========\n')
-							print('\n======== BEGIN Search Battery Test Mode ========\n')
-						else:
-							print('\nENTER Search Battery Test Mode')
-							SearchBatteryTestModeFlag = False
-							battery_mode_timer.stop()
-							battery_mode_timer.reset()
-							search_mode_timer.start()
-							led_sequence.timer.start()
-							print('\n======== END Search Battery Test Mode ========\n')
-							print('\n======== BEGIN Search Mode ========\n')
+		# Handle button presses
+		for button in ButtEventDict:
+			if ButtEventDict[button] == 1:
+				# Down Press
+				print('\nDown Press', button)
+				ButtEventDict[button] = 2
+				if button == 'P23':
+					# MODE button
+					long_press_timer.start()
+					search_mode_timer.stop()
+					search_mode_timer.reset()
+					# TOGGLE Search Mode and Search Battery Test Mode
+					if not SearchBatteryTestModeFlag:
+						print('\nENTER Search Battery Test Mode')
+						SearchBatteryTestModeFlag = True
+						battery_mode_timer.start()
+						led_sequence.timer.stop()
+						led_sequence.timer.reset()
+						print('\n======== END Search Mode ========\n')
+						print('\n======== BEGIN Search Battery Test Mode ========\n')
 					else:
-						# Any other button
+						print('\nENTER Search Battery Test Mode')
+						SearchBatteryTestModeFlag = False
+						battery_mode_timer.stop()
+						battery_mode_timer.reset()
+						search_mode_timer.start()
+						led_sequence.timer.start()
+						print('\n======== END Search Battery Test Mode ========\n')
+						print('\n======== BEGIN Search Mode ========\n')
+				else:
+					# Any other button
+					print('search_mode_timer', search_mode_timer.read(), 's.')
+					search_mode_timer.reset()
+					print('search_mode_timer after reset', search_mode_timer.read(), 's.')
+					if SearchBatteryTestModeFlag:
+						print('\nENTER Search Battery Test Mode')
+						SearchBatteryTestModeFlag = False
+						battery_mode_timer.stop()
+						battery_mode_timer.reset()
+						search_mode_timer.start()
+						led_sequence.timer.start()
+						print('\n======== END Search Battery Test Mode ========\n')
+						print('\n======== BEGIN Search Mode ========\n')
+
+			elif ButtEventDict[button] == 3:
+				# Up Press
+				print('\nUp Press', button)
+				ButtEventDict[button] = 0
+				if button == 'P23':
+					# MODE button
+					if long_press_timer.read() > LongPressTimeoutDuration:
+						print('\nLong press detected at', long_press_timer.read(), 's.')
+						long_press_timer.stop()
+						long_press_timer.reset()
+						# ENTER Sleep Mode with Power Off Sequence
+						print('\n======== END Search Mode ========\n')
+						print('\n======== BEGIN Power Off Sequence Mode ========\n')
+						led_sequence.timer.start()
+						mode = 'PoweringDownMode'
+					else:
+						long_press_timer.stop()
+						print('\nLong press NOT detected at', long_press_timer.read(), 's.')
+						long_press_timer.reset()
+
 						print('search_mode_timer', search_mode_timer.read(), 's.')
 						search_mode_timer.reset()
 						print('search_mode_timer after reset', search_mode_timer.read(), 's.')
-						if SearchBatteryTestModeFlag:
-							print('\nENTER Search Battery Test Mode')
-							SearchBatteryTestModeFlag = False
-							battery_mode_timer.stop()
-							battery_mode_timer.reset()
-							search_mode_timer.start()
-							led_sequence.timer.start()
-							print('\n======== END Search Battery Test Mode ========\n')
-							print('\n======== BEGIN Search Mode ========\n')
-
-				elif ButtEventDict[button] == 3:
-					# Up Press
-					print('\nUp Press', button)
-					ButtEventDict[button] = 0
-					if button == 'P23':
-						# MODE button
-						if long_press_timer.read() > LongPressTimeoutDuration:
-							print('\nLong press detected at', long_press_timer.read(), 's.')
-							long_press_timer.stop()
-							long_press_timer.reset()
-							# ENTER Sleep Mode with Power Off Sequence
-							print('\nENTER Sleep Mode with Power Off Sequence\n')
-							PowerOffSequenceFlag = True
-							led_sequence.timer.start()
-						else:
-							long_press_timer.stop()
-							print('\nLong press NOT detected at', long_press_timer.read(), 's.')
-							long_press_timer.reset()
-
-							print('search_mode_timer', search_mode_timer.read(), 's.')
-							search_mode_timer.reset()
-							print('search_mode_timer after reset', search_mode_timer.read(), 's.')
-					else:
-						# Any other button
-						print('search_mode_timer', search_mode_timer.read(), 's.')
-						search_mode_timer.reset()
-						print('search_mode_timer after reset', search_mode_timer.read(), 's.')
+				else:
+					# Any other button
+					print('search_mode_timer', search_mode_timer.read(), 's.')
+					search_mode_timer.reset()
+					print('search_mode_timer after reset', search_mode_timer.read(), 's.')
 
 		if wlan.isconnected():
 			# Create and connect a socket
@@ -360,8 +391,15 @@ while 1:
 			mode = 'SearchModes'
 
 	elif mode == 'PoweringDownMode':
-		pass
+		PowerOffSequenceFlag = led_sequence.power_off(PowerOffSequenceFlag)
+
+		if not PowerOffSequenceFlag:
+			mode = 'SleepMode'
+			print('\n======== END Powering Down Mode ========\n')
+			print('\n======== BEGIN Sleep Mode ========\n')
+
 	elif mode == 'SleepMode':
-		pass
+		print('ENTER deep sleep\n')
+		machine.deepsleep()
 	else:
 		print('ERROR - no mode selected area should never be entered')
