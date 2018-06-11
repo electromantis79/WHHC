@@ -4,30 +4,7 @@ import math
 import time
 
 
-def connect_socket(host, port):
-	try:
-		# Create an AF_INET, STREAM socket (TCP)
-		sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-	except OSError as err:
-		print("connect_socket OS error:", err)
-		print('Failed to create socket.')
-		machine.reset()
-
-	print('Socket Created')
-
-	try:
-		sock.connect((host, port))
-		sock.setblocking(0)
-	except OSError as err:
-		print("connect_socket OS error:", err)
-		print('Failed to connect to ' + host)
-		machine.reset()
-
-	print('Socket Connected to ' + host + ' on port ' + str(port))
-	return sock
-
-
-def check_receive(sock, host, port):
+def check_receive(sock, mode):
 	data = None
 	try:
 		data = sock.recv(4096)
@@ -41,18 +18,17 @@ def check_receive(sock, host, port):
 		if err.errno == 11:
 			# Don't care about error here. It is normal for .recv() if non-blocking to wait for device to be ready
 			print('special 11 spot', err)
-			pass
 		elif err.errno == 113:
 			print("check_receive OS error:", err)
-			machine.reset()
 		elif err.errno == 104:  # ECONNRESET
 			print("check_receive OS error ECONNRESET:", err)
-			time.sleep_us(10)
-			sock = connect_socket(host, port)
 		else:
 			print("check_receive OS error GENERIC:", err)
-			machine.reset()
-	return sock, data
+		mode = 'SearchModes'
+		print('\n======== END Connected Modes ========\n')
+		print('\n======== BEGIN Search Modes ========\n')
+
+	return sock, data, mode
 
 
 def decode_bytes_to_string(data):
@@ -63,36 +39,42 @@ def decode_bytes_to_string(data):
 	return string
 
 
-def send_button_press(sock, host, port, butt_event_dict, key_map_dict):
-	message = None
+def handle_button_event(butt_event_dict, key_map_dict):
+	button_events_string = None
 	for button in butt_event_dict:
 		if butt_event_dict[button]:
 			if butt_event_dict[button] == 1:
 				direction = 'D'
 				butt_event_dict[button] = 2
-				message = str(key_map_dict[button]) + direction
+				button_events_string = str(key_map_dict[button]) + direction
 			elif butt_event_dict[button] == 3:
 				direction = 'U'
 				butt_event_dict[button] = 0
-				message = str(key_map_dict[button]) + direction
+				button_events_string = str(key_map_dict[button]) + direction
 
-			if message:
-				# Send some data to remote server
-				# Connect to remote server
-				try:
-					# Send the whole string
-					sock.sendall(message)
-					print('Sent', message)
-					message = 0
-				except OSError as err:
-					if err.errno == 104:  # ECONNRESET
-						print("send_button_press OS error ECONNRESET:", err)
-						time.sleep_us(10)
-						sock = connect_socket(host, port)
-					else:
-						print("send_button_press OS error:", err)
-						machine.reset()
-	return sock, message
+	return button_events_string
+
+
+def send_button_events(sock, message, mode):
+	if message:
+		# Send some data to remote server
+		# Connect to remote server
+		try:
+			# Send the whole string
+			sock.sendall(message)
+			print('Sent', message)
+
+		except OSError as err:
+			if err.errno == 104:  # ECONNRESET
+				print("send_button_events OS error ECONNRESET:", err)
+			else:
+				print("send_button_events OS error:", err)
+
+			mode = 'SearchModes'
+			print('\n======== END Connected Modes ========\n')
+			print('\n======== BEGIN Search Modes ========\n')
+
+	return sock, mode
 
 
 def get_rssi(wlan):

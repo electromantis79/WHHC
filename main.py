@@ -50,6 +50,7 @@ SearchBatteryTestModeFlag = False
 ReceiverDiscoveredFlag = False
 TransferFilesFlag = False
 TransferFilesCompleteFlag = False
+SocketConnectedFlag = False
 mode = 'SearchModes'
 
 # LED definitions
@@ -143,7 +144,7 @@ long_press_timer = Timer.Chrono()
 
 if machine.reset_cause() == machine.DEEPSLEEP_RESET:
 	# sleep if button not being held then continue on release
-	print('Return from DEEP SLEEP')
+	print('\nReturn from DEEP SLEEP')
 	if not ButtDict['P23'].value():
 		button = 'P23'
 		ButtEventDict[button] = 1
@@ -217,14 +218,7 @@ while 1:
 	machine.idle()
 	time.sleep_ms(MainLoopFrequencyMs)
 
-	if mode == 'BootUp':
-		PowerOnSequenceFlag = led_sequence.power_on(PowerOnSequenceFlag)
-		if not PowerOnSequenceFlag:
-			mode = 'SearchModes'
-			search_mode_timer.start()
-			led_sequence.timer.start()
-
-	elif mode == 'SearchModes':
+	if mode == 'SearchModes':
 
 		# LED Sequences
 		led_sequence.searching_for_receiver(not SearchBatteryTestModeFlag)
@@ -324,33 +318,60 @@ while 1:
 					print('search_mode_timer after reset', search_mode_timer.read(), 's.')
 
 		if wlan.isconnected():
-			# Create and connect a socket
-			sock = connect_socket(HOST, PORT)
 
-			mode = 'DiscoveredMode'
-			long_press_timer.stop()
-			long_press_timer.reset()
-			search_mode_timer.stop()
-			search_mode_timer.reset()
-			battery_mode_timer.stop()
-			battery_mode_timer.reset()
-			led_sequence.timer.stop()
-			led_sequence.timer.reset()
-			ip, mask, gateway, dns = wlan.ifconfig()
-			print('IP address: ', ip)
-			print('Netmask:    ', mask)
-			print('Gateway:    ', gateway)
-			print('DNS:        ', dns)
-			print()
-			led_sequence.timer.start()
-			print('\n======== END Search Modes ========\n')
-			print('\n======== BEGIN Discovered Mode ========\n')
-			ReceiverDiscoveredFlag = True
+			if not SocketConnectedFlag:
+				# Create and connect a socket
+				try:
+					# Create an AF_INET, STREAM socket (TCP)
+					sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+					print('Socket Created')
+
+				except OSError as err:
+					print("create_socket OS error:", err)
+					print('Failed to create socket.')
+					time.sleep_ms(500)
+					machine.reset()
+
+				try:
+					sock.connect((HOST, PORT))
+					sock.setblocking(0)
+					print('Socket Connected to ' + HOST + ' on port ' + str(PORT))
+					SocketConnectedFlag = True
+
+				except OSError as err:
+					print("connect_socket OS error:", err)
+					print('Failed to connect to ' + HOST)
+					sock.close()
+					del sock
+
+			if SocketConnectedFlag:
+				SocketConnectedFlag = False
+
+				mode = 'DiscoveredMode'
+				long_press_timer.stop()
+				long_press_timer.reset()
+				search_mode_timer.stop()
+				search_mode_timer.reset()
+				battery_mode_timer.stop()
+				battery_mode_timer.reset()
+				led_sequence.timer.stop()
+				led_sequence.timer.reset()
+				ip, mask, gateway, dns = wlan.ifconfig()
+				print('IP address: ', ip)
+				print('Netmask:    ', mask)
+				print('Gateway:    ', gateway)
+				print('DNS:        ', dns)
+				print()
+				led_sequence.timer.start()
+				print('\n======== END Search Modes ========\n')
+				print('\n======== BEGIN Discovered Mode ========\n')
+				ReceiverDiscoveredFlag = True
 
 	elif mode == 'DiscoveredMode':
 		ReceiverDiscoveredFlag = led_sequence.receiver_discovered(ReceiverDiscoveredFlag)
 
 		if not ReceiverDiscoveredFlag:
+			# TODO: add function here to check if we have a file to transfer
 			if TransferFilesFlag:
 				TransferFilesFlag = False
 				mode = 'TransferMode'
@@ -378,17 +399,22 @@ while 1:
 
 	elif mode == 'ConnectedMode':
 
-		# Send button press to server
-		sock, message = send_button_press(sock, HOST, PORT, ButtEventDict, KeyMapDict)
+		# Handle button events
+		button_events_string = handle_button_event(ButtEventDict, KeyMapDict)
+
+		# Send button events to server
+		sock, mode = send_button_events(sock, button_events_string, mode)
 
 		# Check for data
-		sock, data = check_receive(sock, HOST, PORT)
+		sock, data, mode = check_receive(sock, mode)
 
 		# Check effect of received data
 
 		# Check connection to wifi and reconnect
 		if not wlan.isconnected():
 			mode = 'SearchModes'
+			print('\n======== END Connected Modes ========\n')
+			print('\n======== BEGIN Search Modes ========\n')
 
 	elif mode == 'PoweringDownMode':
 		PowerOffSequenceFlag = led_sequence.power_off(PowerOffSequenceFlag)
