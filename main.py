@@ -55,15 +55,15 @@ mode = 'SearchModes'
 
 # LED definitions
 LedDict = {}
-LedDict['P13'] = Pin(Pin.exp_board.G5, mode=Pin.OUT)  # PIN_1  = LED_5 = topLed = PWM_1[5]
-LedDict['P18'] = Pin(Pin.exp_board.G30, mode=Pin.OUT)  # PIN_13 = LED_6 = signalLed
-LedDict['P17'] = Pin(Pin.exp_board.G31, mode=Pin.OUT)  # PIN_14 = LED_4 = strengthLedTop
-# LedDict['P16'] = Pin(Pin.exp_board.G3, mode=Pin.OUT)  # PIN_15 = LED_3 = strengthLedMiddleTop
-LedDict['P15'] = Pin(Pin.exp_board.G0, mode=Pin.OUT)   # PIN_16 = LED_2 = strengthLedMiddleBottom
-LedDict['P14'] = Pin(Pin.exp_board.G4, mode=Pin.OUT)   # PIN_17 = LED_1 = strengthLedBottom
-LedDict['P19'] = Pin(Pin.exp_board.G6, mode=Pin.OUT)  # PIN_18 = LED_7 = batteryLed
+LedDict['P20'] = Pin('P20', mode=Pin.OUT)  # PIN_2  = LED_5 = topLed = PWM_1[5]
+LedDict['P11'] = Pin('P11', mode=Pin.OUT)  # PIN_13 = LED_6 = signalLed
+LedDict['P10'] = Pin('P10', mode=Pin.OUT)  # PIN_14 = LED_4 = strengthLedTop
+LedDict['P9'] = Pin('P9', mode=Pin.OUT)  # PIN_15 = LED_3 = strengthLedMiddleTop
+LedDict['P8'] = Pin('P8', mode=Pin.OUT)   # PIN_16 = LED_2 = strengthLedMiddleBottom
+LedDict['P7'] = Pin('P7', mode=Pin.OUT)   # PIN_17 = LED_1 = strengthLedBottom
+LedDict['P6'] = Pin('P6', mode=Pin.OUT)  # PIN_18 = LED_7 = batteryLed
 
-# LedDict['P2'] = Pin(Pin.module.P2, mode = Pin.OUT)#WiPy Heartbeat pin
+# LedDict['P2'] = Pin('P2', mode = Pin.OUT)#WiPy Heartbeat pin
 LedPinList = list(LedDict.keys())
 print('\nLedDict', LedDict)
 
@@ -76,27 +76,25 @@ led_sequence = LedSequences(LedDict)
 # 10-Button Baseball Keypad
 ButtDict = {}
 ButtDict['P23'] = Pin(
-	Pin.exp_board.G10, mode=Pin.IN, pull=Pin.PULL_UP)  # PIN_19 = BUTT_0 = KEY_10 = modeButt
-ButtDict['P11'] = Pin(
-	Pin.exp_board.G22, mode=Pin.IN, pull=Pin.PULL_UP)  # PIN_4 = BUTT_1 = KEY_9 = outPlusButt = CX_DETECT
-ButtDict['P10'] = Pin(
-	Pin.exp_board.G17, mode=Pin.IN, pull=Pin.PULL_UP)  # PIN_5 = BUTT_2 = KEY_8 = strikePlusButt =  = LED2_IN
-# BUTTON ON EXPANSION BOARD
-
-ButtDict['P9'] = Pin(
-	Pin.exp_board.G16, mode=Pin.IN, pull=Pin.PULL_UP)  # PIN_6 = BUTT_3 = KEY_7 = ballPlusButt = PIC_RX2/LED1_IN
-ButtDict['P8'] = Pin(
-	Pin.exp_board.G15, mode=Pin.IN, pull=Pin.PULL_UP)  # PIN_7 = BUTT_4 = KEY_6 = homeMinusButt = RUN
-ButtDict['P7'] = Pin(
-	Pin.exp_board.G14, mode=Pin.IN, pull=Pin.PULL_UP)  # PIN_8 = BUTT_5 = KEY_5 = inningPlusButt = STOP
-ButtDict['P6'] = Pin(
-	Pin.exp_board.G13, mode=Pin.IN, pull=Pin.PULL_UP)  # PIN_9 = BUTT_6 = KEY_4 = guestMinusButt = RUN/STOP CLOCK
+	'P23', mode=Pin.IN, pull=Pin.PULL_UP)  # PIN_19 = BUTT_0 = KEY_10 = modeButt
 ButtDict['P5'] = Pin(
-	Pin.exp_board.G12, mode=Pin.IN, pull=Pin.PULL_UP)  # PIN_10 = BUTT_7 = KEY_3 = homePlusButt = RUN/STOP DGT
+	'P5', mode=Pin.IN, pull=Pin.PULL_UP)  # PIN_4 = BUTT_1 = KEY_9 = outPlusButt = CX_DETECT
 ButtDict['P4'] = Pin(
-	Pin.exp_board.G11, mode=Pin.IN, pull=Pin.PULL_UP)  # PIN_11 = BUTT_8 = KEY_2 = clockToggleButt = RESET 2
+	'P4', mode=Pin.IN, pull=Pin.PULL_UP)  # PIN_5 = BUTT_2 = KEY_8 = strikePlusButt =  = LED2_IN
 ButtDict['P3'] = Pin(
-	Pin.exp_board.G24, mode=Pin.IN, pull=Pin.PULL_UP)  # PIN_12 = BUTT_9 = KEY_1 = guestPlusButt = RESET 1
+	'P3', mode=Pin.IN, pull=Pin.PULL_UP)  # PIN_6 = BUTT_3 = KEY_7 = ballPlusButt = PIC_RX2/LED1_IN
+ButtDict['P18'] = Pin(
+	'P18', mode=Pin.IN, pull=Pin.PULL_UP)  # PIN_7 = BUTT_4 = KEY_6 = homeMinusButt = RUN
+ButtDict['P17'] = Pin(
+	'P17', mode=Pin.IN, pull=Pin.PULL_UP)  # PIN_8 = BUTT_5 = KEY_5 = inningPlusButt = STOP
+ButtDict['P16'] = Pin(
+	'P16', mode=Pin.IN, pull=Pin.PULL_UP)  # PIN_9 = BUTT_6 = KEY_4 = guestMinusButt = RUN/STOP CLOCK
+ButtDict['P15'] = Pin(
+	'P15', mode=Pin.IN, pull=Pin.PULL_UP)  # PIN_10 = BUTT_7 = KEY_3 = homePlusButt = RUN/STOP DGT
+ButtDict['P14'] = Pin(
+	'P14', mode=Pin.IN, pull=Pin.PULL_UP)  # PIN_11 = BUTT_8 = KEY_2 = clockToggleButt = RESET 2
+ButtDict['P13'] = Pin(
+	'P13', mode=Pin.IN, pull=Pin.PULL_UP)  # PIN_12 = BUTT_9 = KEY_1 = guestPlusButt = RESET 1
 ButtPinList = list(ButtDict.keys())
 print('\nButtDict', ButtDict, '\nButtPinList', ButtPinList)
 
@@ -121,14 +119,14 @@ print('\nPinDictReverse', PinDictReverse)
 
 # Translation dictionary for key names, correct this if pins ever change
 KeyDict = {
-	'P23': 'KEY_10', 'P11': 'KEY_9', 'P10': 'KEY_8', 'P9': 'KEY_7', 'P8': 'KEY_6', 'P7': 'KEY_5',
-	'P6': 'KEY_4', 'P5': 'KEY_3', 'P4': 'KEY_2', 'P3': 'KEY_1'}
+	'P23': 'KEY_10', 'P5': 'KEY_9', 'P4': 'KEY_8', 'P3': 'KEY_7', 'P18': 'KEY_6', 'P17': 'KEY_5',
+	'P16': 'KEY_4', 'P15': 'KEY_3', 'P14': 'KEY_2', 'P13': 'KEY_1'}
 print('\nKeyDict', KeyDict)
 
 # Translation dictionary for key names, correct this if pins ever change
 KeyMapDict = {
-	'P23': 'E7', 'P11': 'D6', 'P10': 'D7', 'P9': 'D8', 'P8': 'C6', 'P7': 'C7', 'P6': 'C8', 'P5': 'B6',
-	'P4': 'B7', 'P3': 'B8'}
+	'P23': 'E7', 'P5': 'D6', 'P4': 'D7', 'P3': 'D8', 'P18': 'C6', 'P17': 'C7', 'P16': 'C8', 'P15': 'B6',
+	'P14': 'B7', 'P13': 'B8'}
 print('\nKeyMapDict', KeyMapDict)
 
 # Button Interrupts

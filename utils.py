@@ -101,7 +101,7 @@ def get_battery_voltage(show=0):
 	"""
 	number_of_adc_readings = const(100)
 	adc = machine.ADC(0)
-	adcread = adc.channel(attn=2, pin='P16')
+	adcread = adc.channel(attn=2, pin='P19')
 	samples_adc = [0.0]*number_of_adc_readings
 	mean_adc = 0.0
 	i = 0
@@ -122,6 +122,9 @@ def get_battery_voltage(show=0):
 		print("Mean of ADC readings (0-1846 mV) = %15.13f" % (mean_adc*1846/4096))  # Calibrated manually
 		print("Variance of ADC readings = %15.13f" % variance_adc)
 		print("Standard Deviation of ADC readings = %15.13f" % math.sqrt(variance_adc))
-		print("10**6*Variance/(Mean**2) of ADC readings = %15.13f" % ((variance_adc*10**6)//(mean_adc**2)))
+		if mean_adc:
+			print("10**6*Variance/(Mean**2) of ADC readings = %15.13f" % ((variance_adc*10**6)//(mean_adc**2)))
+		else:
+			print("10**6*Variance/(Mean**2) of ADC readings = %15.13f" % mean_adc)
 		print("Battery voltage = %15.13f" % vbatt)
 	return vbatt
