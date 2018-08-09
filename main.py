@@ -299,8 +299,10 @@ while 1:
 						# ENTER Sleep Mode with Power Off Sequence
 						print('\n======== END Search Mode ========\n')
 						print('\n======== BEGIN Power Off Sequence Mode ========\n')
-						led_sequence.timer.start()
 						mode = 'PoweringDownMode'
+						led_sequence.timer.stop()
+						led_sequence.timer.reset()
+						led_sequence.timer.start()
 					else:
 						long_press_timer.stop()
 						print('\nLong press NOT detected at', long_press_timer.read(), 's.')
@@ -315,7 +317,7 @@ while 1:
 					search_mode_timer.reset()
 					print('search_mode_timer after reset', search_mode_timer.read(), 's.')
 
-		if wlan.isconnected():
+		if wlan.isconnected() and mode != 'PoweringDownMode':
 
 			if not SocketConnectedFlag:
 				# Create and connect a socket
