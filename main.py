@@ -377,15 +377,20 @@ while 1:
 				mode = 'TransferMode'
 				print('\n======== END Discovered Mode ========\n')
 				print('\n======== BEGIN Transfer Mode ========\n')
+				led_sequence.timer.stop()
+				led_sequence.timer.reset()
+				led_sequence.timer.start()
 				# TODO: add thread here to transfer file with TransferFilesCompleteFlag
 			else:
 				mode = 'ConnectedMode'
 				print('\n======== END Discovered Mode ========\n')
 				print('\n======== BEGIN Connected Modes ========\n')
+				led_sequence.timer.stop()
+				led_sequence.timer.reset()
 
 	elif mode == 'TransferMode':
 		led_sequence.file_transfer(1)
-		# TODO: should this sequence finish one cycle before moving on?
+		# TODO: should this sequence finish one cycle before moving on? YES
 
 		if TransferFilesCompleteFlag and led_sequence.transfer_cycle_flag:
 			TransferFilesCompleteFlag = False
