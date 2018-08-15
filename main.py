@@ -241,6 +241,9 @@ while 1:
 			SearchBatteryTestModeFlag = False
 			print('\n======== END Search Battery Test Mode ========\n')
 			print('\n======== BEGIN Search Mode ========\n')
+			search_mode_timer.stop()
+			search_mode_timer.reset()
+			search_mode_timer.start()
 
 		# Handle button presses
 		for button in ButtEventDict:
@@ -248,9 +251,9 @@ while 1:
 				# Down Press
 				print('\nDown Press', button)
 				ButtEventDict[button] = 2
+				long_press_timer.start()
 				if button == 'P23':
 					# MODE button
-					long_press_timer.start()
 					search_mode_timer.stop()
 					search_mode_timer.reset()
 					# TOGGLE Search Mode and Search Battery Test Mode
@@ -263,7 +266,7 @@ while 1:
 						print('\n======== END Search Mode ========\n')
 						print('\n======== BEGIN Search Battery Test Mode ========\n')
 					else:
-						print('\nENTER Search Battery Test Mode')
+						print('\nENTER Search Mode')
 						SearchBatteryTestModeFlag = False
 						battery_mode_timer.stop()
 						battery_mode_timer.reset()
@@ -309,12 +312,16 @@ while 1:
 						long_press_timer.reset()
 
 						print('search_mode_timer', search_mode_timer.read(), 's.')
+						search_mode_timer.stop()
 						search_mode_timer.reset()
+						search_mode_timer.start()
 						print('search_mode_timer after reset', search_mode_timer.read(), 's.')
 				else:
 					# Any other button
 					print('search_mode_timer', search_mode_timer.read(), 's.')
+					search_mode_timer.stop()
 					search_mode_timer.reset()
+					search_mode_timer.start()
 					print('search_mode_timer after reset', search_mode_timer.read(), 's.')
 
 		if wlan.isconnected() and mode != 'PoweringDownMode':
@@ -343,6 +350,7 @@ while 1:
 					print('Failed to connect to ' + HOST)
 					sock.close()
 					del sock
+					time.sleep_ms(50)
 
 			if SocketConnectedFlag:
 				SocketConnectedFlag = False
