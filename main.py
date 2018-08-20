@@ -4,6 +4,7 @@ import machine
 import sys
 import time
 import pycom
+import json
 
 from network import WLAN
 from machine import Pin
@@ -53,8 +54,8 @@ TransferFilesCompleteFlag = False
 SocketConnectedFlag = False
 mode = 'SearchModes'
 
-# LED definitions
-LedDict = {}
+# LED definitions ==========================================
+LedDict = dict()
 LedDict['P20'] = Pin('P20', mode=Pin.OUT)  # PIN_2  = LED_5 = topLed = PWM_1[5]
 LedDict['P11'] = Pin('P11', mode=Pin.OUT)  # PIN_13 = LED_6 = signalLed
 LedDict['P10'] = Pin('P10', mode=Pin.OUT)  # PIN_14 = LED_4 = strengthLedTop
@@ -62,8 +63,6 @@ LedDict['P9'] = Pin('P9', mode=Pin.OUT)  # PIN_15 = LED_3 = strengthLedMiddleTop
 LedDict['P8'] = Pin('P8', mode=Pin.OUT)   # PIN_16 = LED_2 = strengthLedMiddleBottom
 LedDict['P7'] = Pin('P7', mode=Pin.OUT)   # PIN_17 = LED_1 = strengthLedBottom
 LedDict['P6'] = Pin('P6', mode=Pin.OUT)  # PIN_18 = LED_7 = batteryLed
-
-LedPinVsNumberList = [('P20', '5'), ('P11', '6'), ('P10', '4'), ('P9', '3'), ('P8', '2'), ('P7', '1'), ('P6', '7')]
 
 # LedDict['P2'] = Pin('P2', mode = Pin.OUT)#WiPy Heartbeat pin
 LedPinList = list(LedDict.keys())
@@ -75,8 +74,30 @@ for x in LedPinList:
 
 led_sequence = LedSequences(LedDict)
 
-# 10-Button Baseball Keypad
-ButtDict = {}
+# Build LedInfoDict ----------------------------------------
+LedInfoDict = dict.fromkeys(LedPinList)
+for pin in LedInfoDict:
+	LedInfoDict[pin] = dict()
+
+LedPinVsNumberList = [
+	('P20', '5'), ('P11', '6'), ('P10', '4'), ('P9', '3'), ('P8', '2'), ('P7', '1'), ('P6', '7')]
+for pin in LedPinVsNumberList:
+	LedInfoDict[pin[0]]['led_id'] = pin[1]
+
+LedPinVsKeypadPinList = [
+	('P20', '2'), ('P11', '13'), ('P10', '14'), ('P9', '15'), ('P8', '16'), ('P7', '17'), ('P6', '18')]
+for pin in LedPinVsKeypadPinList:
+	LedInfoDict[pin[0]]['keypad_pin_number'] = pin[1]
+
+LedPinVsFunctionNameList = [
+	('P20', 'topLed'), ('P11', 'signalLed'), ('P10', 'strengthLedTop'), ('P9', 'strengthLedMiddleTop'),
+	('P8', 'strengthLedMiddleBottom'), ('P7', 'strengthLedBottom'), ('P6', 'batteryLed')]
+for pin in LedPinVsFunctionNameList:
+	LedInfoDict[pin[0]]['function_name'] = pin[1]
+
+
+# 10-Button Baseball Keypad definitions ===================
+ButtDict = dict()
 ButtDict['P23'] = Pin(
 	'P23', mode=Pin.IN, pull=Pin.PULL_UP)  # PIN_19 = BUTT_0 = KEY_10 = modeButt
 ButtDict['P5'] = Pin(
@@ -101,41 +122,64 @@ ButtPinList = list(ButtDict.keys())
 print('\nButtDict', ButtDict, '\nButtPinList', ButtPinList)
 
 ButtEventDict = dict.fromkeys(ButtPinList, 0)
-print('\nButtEventDict', ButtEventDict)
-
-
-# Pin dictionary and its reverse used to get pin id string out of callback
-PinDict = {}
-PinList = []
-PinList.extend(LedPinList)
-PinList.extend(ButtPinList)
-print('\nPinList', PinList)
-PinRange = range(len(PinList))
-for x, y in enumerate(PinList):
-	PinDict[y] = PinRange[x]
-print('\nPinDict', PinDict)
-PinDictReverse = {}
-for x, y in enumerate(PinRange):
-	PinDictReverse[y] = PinList[x]
-print('\nPinDictReverse', PinDictReverse)
-
-# Translation dictionary for key names, correct this if pins ever change
-KeyDict = {
-	'P23': 'KEY_10', 'P5': 'KEY_9', 'P4': 'KEY_8', 'P3': 'KEY_7', 'P18': 'KEY_6', 'P17': 'KEY_5',
-	'P16': 'KEY_4', 'P15': 'KEY_3', 'P14': 'KEY_2', 'P13': 'KEY_1'}
-print('\nKeyDict', KeyDict)
-
-# Translation dictionary for key names, correct this if pins ever change
-KeyMapDict = {
-	'P23': 'E7', 'P5': 'D6', 'P4': 'D7', 'P3': 'D8', 'P18': 'C6', 'P17': 'C7', 'P16': 'C8', 'P15': 'B6',
-	'P14': 'B7', 'P13': 'B8'}
-print('\nKeyMapDict', KeyMapDict)
+# print('\nButtEventDict', ButtEventDict)
 
 # Button Interrupts
 for x in ButtPinList:
 	ButtDict[x].callback(trigger=Pin.IRQ_FALLING | Pin.IRQ_RISING, handler=button_event)
 
 machine.pin_deepsleep_wakeup(['P23'], machine.WAKEUP_ALL_LOW, enable_pull=True)
+
+
+# Build ButtonInfoDict -----------------------------------
+ButtonInfoDict = dict.fromkeys(ButtPinList)
+for pin in ButtonInfoDict:
+	ButtonInfoDict[pin] = dict()
+
+ButtonPinVsNumberList = [
+	('P23', '0'), ('P5', '1'), ('P4', '2'), ('P3', '3'), ('P18', '4'), ('P17', '5'), ('P16', '6'),
+	('P15', '7'), ('P14', '8'), ('P13', '9')]
+for pin in ButtonPinVsNumberList:
+	ButtonInfoDict[pin[0]]['button_id'] = pin[1]
+
+ButtonPinVsKeypadPinList = [
+	('P23', '19'), ('P5', '4'), ('P4', '5'), ('P3', '6'), ('P18', '7'), ('P17', '8'), ('P16', '9'),
+	('P15', '10'), ('P14', '11'), ('P13', '12')]
+for pin in ButtonPinVsKeypadPinList:
+	ButtonInfoDict[pin[0]]['keypad_pin_number'] = pin[1]
+
+ButtonPinVsFunctionNameList = [
+	('P23', 'modeButt'), ('P5', 'outPlusButt'), ('P4', 'strikePlusButt'), ('P3', 'ballPlusButt'),
+	('P18', 'homeMinusButt'), ('P17', 'inningPlusButt'), ('P16', 'guestMinusButt'),
+	('P15', 'homePlusButt'), ('P14', 'clockToggleButt'), ('P13', 'guestPlusButt')]
+for pin in ButtonPinVsFunctionNameList:
+	ButtonInfoDict[pin[0]]['function_name'] = pin[1]
+
+# Translation dictionary for key names, correct this if pins ever change
+KeyDict = {
+	'P23': '10', 'P5': '9', 'P4': '8', 'P3': '7', 'P18': '6', 'P17': '5',
+	'P16': '4', 'P15': '3', 'P14': '2', 'P13': '1'}
+for pin in KeyDict:
+	ButtonInfoDict[pin]['keypad_key_number'] = KeyDict[pin]
+
+# Translation dictionary for key names, correct this if pins ever change
+KeyMapDict = {
+	'P23': 'E7', 'P5': 'D6', 'P4': 'D7', 'P3': 'D8', 'P18': 'C6', 'P17': 'C7', 'P16': 'C8', 'P15': 'B6',
+	'P14': 'B7', 'P13': 'B8'}
+for pin in KeyMapDict:
+	ButtonInfoDict[pin]['keymap_grid_value'] = KeyMapDict[pin]
+
+
+# Build JSON hierarchy ==========================================
+JsonTreeDict = build_json_tree(LedDict, ButtDict, LedInfoDict, ButtonInfoDict)
+# print('\nJsonTreeDict', JsonTreeDict)
+
+# Write tree.json file
+with open('tree.json', 'w') as f:
+	json_string = json.dumps(JsonTreeDict)
+	f.write(json_string)
+# print('\njson_string', json_string)
+
 
 # Timers
 search_mode_timer = Timer.Chrono()

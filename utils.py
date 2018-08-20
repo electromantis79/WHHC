@@ -163,3 +163,34 @@ def get_battery_voltage(show=0):
 			print("10**6*Variance/(Mean**2) of ADC readings = %15.13f" % mean_adc)
 		print("Battery voltage = %15.13f" % vbatt)
 	return vbatt
+
+
+def build_json_tree(
+		led_dict, button_dict, led_info_dict, button_info_dict):
+	json_tree = dict()
+	json_tree['object_type'] = 'Pin'
+	json_tree['led_objects'] = dict()
+	json_tree['led_objects']['component_type'] = 'led'
+	for led in led_dict:
+		json_tree['led_objects'][led] = dict()
+		json_tree['led_objects'][led]['value'] = led_dict[led].value()
+		json_tree['led_objects'][led]['mode'] = led_dict[led].mode()
+		json_tree['led_objects'][led]['pull'] = led_dict[led].pull()
+		json_tree['led_objects'][led]['keypad_pin_number'] = led_info_dict[led]['keypad_pin_number']
+		json_tree['led_objects'][led]['led_id'] = led_info_dict[led]['led_id']
+		json_tree['led_objects'][led]['function_name'] = led_info_dict[led]['function_name']
+
+	json_tree['button_objects'] = dict()
+	json_tree['button_objects']['component_type'] = 'button'
+	for button in button_dict:
+		json_tree['button_objects'][button] = dict()
+		json_tree['button_objects'][button]['value'] = button_dict[button].value()
+		json_tree['button_objects'][button]['mode'] = button_dict[button].mode()
+		json_tree['button_objects'][button]['pull'] = button_dict[button].pull()
+		json_tree['button_objects'][button]['keypad_pin_number'] = button_info_dict[button]['keypad_pin_number']
+		json_tree['button_objects'][button]['button_id'] = button_info_dict[button]['button_id']
+		json_tree['button_objects'][button]['function_name'] = button_info_dict[button]['function_name']
+		json_tree['button_objects'][button]['keypad_key_number'] = button_info_dict[button]['keypad_key_number']
+		json_tree['button_objects'][button]['keymap_grid_value'] = button_info_dict[button]['keymap_grid_value']
+
+	return json_tree
