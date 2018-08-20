@@ -5,12 +5,10 @@ import time
 
 
 def check_receive(sock, mode):
+	# print('\nenter check_receive')
 	data = None
 	try:
 		data = sock.recv(4096)
-		if data:
-			data = decode_bytes_to_string(data)
-			print('Data Received', data)
 
 	except OSError as err:
 		# print (err, err.errno)
@@ -28,7 +26,44 @@ def check_receive(sock, mode):
 		print('\n======== END Connected Modes ========\n')
 		print('\n======== BEGIN Search Modes ========\n')
 
+	if data is not None:
+		data = decode_bytes_to_string(data)
+
+	if data:
+		print('Data Received', data)
+
 	return sock, data, mode
+
+
+def check_led_data(data, led_dict, led_pin_vs_number_list):
+	print('\nDATA in check_led_data is', data)
+	if data[0] == '$':
+		# $ = led data
+		data = data[1:]
+		length = len(data) / 3
+		print(length)
+		print(data[0] == 'L')
+		print(data[1] in list(['1', '2', '3', '4', '5', '6', '7']))
+		byte_index = 0
+		for leds in list(range(int(length-1))):
+			print(byte_index, leds)
+			if data[byte_index] == '$':
+				byte_index = 0
+
+			if data[0+byte_index] == 'L' and data[1+byte_index] in list(['1', '2', '3', '4', '5', '6', '7']):
+				for pair in led_pin_vs_number_list:
+					if data[1+byte_index] == pair[1]:
+						if data[2+byte_index] == '1':
+							print(data[0+byte_index:2+byte_index], 'led True', data[2+byte_index])
+							led_dict[pair[0]].value(True)
+						elif data[2+byte_index] == '0':
+							print(data[0+byte_index:2+byte_index], 'led False', data[2+byte_index])
+							led_dict[pair[0]].value(False)
+						else:
+							print('check_led_data packet format error of', data[2+byte_index])
+				byte_index += 3
+			else:
+				continue
 
 
 def decode_bytes_to_string(data):

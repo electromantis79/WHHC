@@ -63,6 +63,8 @@ LedDict['P8'] = Pin('P8', mode=Pin.OUT)   # PIN_16 = LED_2 = strengthLedMiddleBo
 LedDict['P7'] = Pin('P7', mode=Pin.OUT)   # PIN_17 = LED_1 = strengthLedBottom
 LedDict['P6'] = Pin('P6', mode=Pin.OUT)  # PIN_18 = LED_7 = batteryLed
 
+LedPinVsNumberList = [('P20', '5'), ('P11', '6'), ('P10', '4'), ('P9', '3'), ('P8', '2'), ('P7', '1'), ('P6', '7')]
+
 # LedDict['P2'] = Pin('P2', mode = Pin.OUT)#WiPy Heartbeat pin
 LedPinList = list(LedDict.keys())
 print('\nLedDict', LedDict)
@@ -411,6 +413,7 @@ while 1:
 			print('\n======== BEGIN Connected Modes ========\n')
 
 	elif mode == 'ConnectedMode':
+		# print('\nConnectedMode')
 
 		# Handle button events
 		button_events_string = handle_button_event(ButtEventDict, KeyMapDict)
@@ -422,6 +425,8 @@ while 1:
 		sock, data, mode = check_receive(sock, mode)
 
 		# Check effect of received data
+		if data and data[0] != '[':
+			check_led_data(data, LedDict, LedPinVsNumberList)
 
 		# Check connection to wifi and reconnect
 		if not wlan.isconnected():
