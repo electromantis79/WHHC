@@ -460,10 +460,10 @@ while 1:
 		# print('\nConnectedMode')
 
 		# Handle button events
-		button_events_string = handle_button_event(ButtEventDict, KeyMapDict)
+		JsonTreeDict = handle_button_event(JsonTreeDict, ButtEventDict)
 
 		# Send button events to server
-		sock, mode = send_button_events(sock, button_events_string, mode)
+		sock, JsonTreeDict, mode = send_button_events(sock, JsonTreeDict, mode)
 
 		# Check for data
 		sock, data, mode = check_receive(sock, mode)

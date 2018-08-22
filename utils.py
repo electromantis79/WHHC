@@ -2,6 +2,7 @@ import socket
 import machine
 import math
 import time
+import json
 
 
 def check_receive(sock, mode):
@@ -74,30 +75,40 @@ def decode_bytes_to_string(data):
 	return string
 
 
-def handle_button_event(butt_event_dict, key_map_dict):
-	button_events_string = None
+def handle_button_event(json_tree, butt_event_dict):
 	for button in butt_event_dict:
 		if butt_event_dict[button]:
 			if butt_event_dict[button] == 1:
-				direction = 'D'
 				butt_event_dict[button] = 2
-				button_events_string = str(key_map_dict[button]) + direction
+				json_tree['button_objects'][button]['event_flag'] = True
+				json_tree['button_objects'][button]['event_state'] = 'down'
 			elif butt_event_dict[button] == 3:
-				direction = 'U'
 				butt_event_dict[button] = 0
-				button_events_string = str(key_map_dict[button]) + direction
+				json_tree['button_objects'][button]['event_flag'] = True
+				json_tree['button_objects'][button]['event_state'] = 'up'
 
-	return button_events_string
+	return json_tree
 
 
-def send_button_events(sock, message, mode):
-	if message:
+def send_button_events(sock, json_tree, mode):
+	temp_dict = dict()
+	for button in json_tree['button_objects'].keys():
+		if button[0] == 'P' and json_tree['button_objects'][button]['event_flag']:
+			temp_dict['button_objects'] = dict()
+			temp_dict['button_objects'][button] = dict()
+			temp_dict['button_objects'][button]['event_flag'] = json_tree['button_objects'][button]['event_flag']
+			temp_dict['button_objects'][button]['event_state'] = json_tree['button_objects'][button]['event_state']
+			temp_dict['button_objects'][button]['keymap_grid_value'] = json_tree['button_objects'][button]['keymap_grid_value']
+			json_tree['button_objects'][button]['event_flag'] = False
+
+	if temp_dict:
 		# Send some data to remote server
 		# Connect to remote server
+		json_string = json.dumps(temp_dict)
 		try:
 			# Send the whole string
-			sock.sendall(message)
-			print('Sent', message)
+			sock.sendall(json_string)
+			print('Sent', json_string)
 
 		except OSError as err:
 			if err.errno == 104:  # ECONNRESET
@@ -109,7 +120,7 @@ def send_button_events(sock, message, mode):
 			print('\n======== END Connected Modes ========\n')
 			print('\n======== BEGIN Search Modes ========\n')
 
-	return sock, mode
+	return sock, json_tree, mode
 
 
 def get_rssi(wlan):
@@ -192,5 +203,7 @@ def build_json_tree(
 		json_tree['button_objects'][button]['function_name'] = button_info_dict[button]['function_name']
 		json_tree['button_objects'][button]['keypad_key_number'] = button_info_dict[button]['keypad_key_number']
 		json_tree['button_objects'][button]['keymap_grid_value'] = button_info_dict[button]['keymap_grid_value']
+		json_tree['button_objects'][button]['event_flag'] = False
+		json_tree['button_objects'][button]['event_state'] = 'up'
 
 	return json_tree
