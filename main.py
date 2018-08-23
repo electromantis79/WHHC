@@ -460,16 +460,23 @@ while 1:
 		# print('\nConnectedMode')
 
 		# Handle button events
-		JsonTreeDict = handle_button_event(JsonTreeDict, ButtEventDict)
+		JsonTreeDict, event_flag = handle_button_event(JsonTreeDict, ButtEventDict)
 
 		# Send button events to server
-		sock, JsonTreeDict, mode = send_button_events(sock, JsonTreeDict, mode)
+		if event_flag:
+			json_tree_fragment_dict = build_json_tree_fragment_dict(JsonTreeDict)
+			sock, mode = send_events(sock, json_tree_fragment_dict, mode)
 
 		# Check for data
 		sock, data, mode = check_receive(sock, mode)
 
-		# Check effect of received data
-		if data and data[0] != '[':
+		# Format data
+		if data:
+			data, broadcast_flag = check_form_broadcast_flag(data)
+			data = convert_to_json_format(data)
+
+		# Process data
+		if data:
 			check_led_data(data, LedDict)
 
 		# Check connection to wifi and reconnect

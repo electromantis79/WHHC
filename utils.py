@@ -5,6 +5,60 @@ import time
 import json
 
 
+def handle_button_event(json_tree, butt_event_dict):
+	event_flag = 0
+	for button in butt_event_dict:
+		if butt_event_dict[button]:
+			if butt_event_dict[button] == 1:
+				butt_event_dict[button] = 2
+				json_tree['button_objects'][button]['event_flag'] = True
+				json_tree['button_objects'][button]['event_state'] = 'down'
+				event_flag = 1
+			elif butt_event_dict[button] == 3:
+				butt_event_dict[button] = 0
+				json_tree['button_objects'][button]['event_flag'] = True
+				json_tree['button_objects'][button]['event_state'] = 'up'
+				event_flag = 1
+
+	return json_tree, event_flag
+
+
+def build_json_tree_fragment_dict(json_tree):
+	temp_dict = dict()
+	for button in json_tree['button_objects'].keys():
+		if button[0] == 'P' and json_tree['button_objects'][button]['event_flag']:
+			temp_dict['button_objects'] = dict()
+			temp_dict['button_objects'][button] = dict()
+			temp_dict['button_objects'][button]['event_flag'] = json_tree['button_objects'][button]['event_flag']
+			temp_dict['button_objects'][button]['event_state'] = json_tree['button_objects'][button]['event_state']
+			temp_dict['button_objects'][button]['keymap_grid_value'] = json_tree['button_objects'][button]['keymap_grid_value']
+			json_tree['button_objects'][button]['event_flag'] = False
+	return temp_dict
+
+
+def send_events(sock, message, mode):
+	if message:
+		# Send some data to remote server
+		# Connect to remote server
+		json_string = json.dumps(message)
+		try:
+			# Send the whole string
+			sock.sendall(json_string)
+			print('\nSent', time.ticks_us()/1000, 'ms:', json_string)
+
+		except OSError as err:
+			if err.errno == 104:  # ECONNRESET
+				print("send_button_events OS error ECONNRESET:", err)
+			else:
+				print("send_button_events OS error:", err)
+
+			mode = 'SearchModes'
+			print('\n======== END Connected Modes ========\n')
+			print('\n======== BEGIN Search Modes ========\n')
+
+	return sock, mode
+
+
 def check_receive(sock, mode):
 	# print('\nenter check_receive')
 	data = None
@@ -31,17 +85,31 @@ def check_receive(sock, mode):
 		data = decode_bytes_to_string(data)
 
 	if data:
-		print('\nData Received', data)
+		print('\nData Received', time.ticks_us()/1000, 'ms:', data)
 
 	return sock, data, mode
 
 
-def check_led_data(data, led_dict):
-	if data[0] == '{':
-		data = json.loads(data)
-		print('\nDATA in check_led_data is', data)
-		json_tree_fragment_dict = dict(data)
+def check_form_broadcast_flag(data):
+	broadcast_flag = False
+	if data[0] == '#':
+		data = data[1:]
+		broadcast_flag = True
+		print('\nData received contained broadcast_flag')
+	return data, broadcast_flag
 
+
+def convert_to_json_format(data):
+	try:
+		data = json.loads(data)
+		return data
+	except:
+		print('\nData received failed json format inspection')
+		return False
+
+
+def check_led_data(json_tree_fragment_dict, led_dict):
+	if json_tree_fragment_dict is not None:
 		if 'led_objects' in json_tree_fragment_dict:
 			for led in json_tree_fragment_dict['led_objects']:
 				if 'value' in json_tree_fragment_dict['led_objects'][led]:
@@ -54,8 +122,6 @@ def check_led_data(data, led_dict):
 					print("\n'value' key is not in fragment of led dictionary",	led)
 		else:
 			print('\nled_objects not in fragment')
-	else:
-		pass  # print('\nDid not receive json formatted data in ', data)
 
 
 def decode_bytes_to_string(data):
@@ -64,54 +130,6 @@ def decode_bytes_to_string(data):
 		z = chr(data[x])
 		string = string + z
 	return string
-
-
-def handle_button_event(json_tree, butt_event_dict):
-	for button in butt_event_dict:
-		if butt_event_dict[button]:
-			if butt_event_dict[button] == 1:
-				butt_event_dict[button] = 2
-				json_tree['button_objects'][button]['event_flag'] = True
-				json_tree['button_objects'][button]['event_state'] = 'down'
-			elif butt_event_dict[button] == 3:
-				butt_event_dict[button] = 0
-				json_tree['button_objects'][button]['event_flag'] = True
-				json_tree['button_objects'][button]['event_state'] = 'up'
-
-	return json_tree
-
-
-def send_button_events(sock, json_tree, mode):
-	temp_dict = dict()
-	for button in json_tree['button_objects'].keys():
-		if button[0] == 'P' and json_tree['button_objects'][button]['event_flag']:
-			temp_dict['button_objects'] = dict()
-			temp_dict['button_objects'][button] = dict()
-			temp_dict['button_objects'][button]['event_flag'] = json_tree['button_objects'][button]['event_flag']
-			temp_dict['button_objects'][button]['event_state'] = json_tree['button_objects'][button]['event_state']
-			temp_dict['button_objects'][button]['keymap_grid_value'] = json_tree['button_objects'][button]['keymap_grid_value']
-			json_tree['button_objects'][button]['event_flag'] = False
-
-	if temp_dict:
-		# Send some data to remote server
-		# Connect to remote server
-		json_string = json.dumps(temp_dict)
-		try:
-			# Send the whole string
-			sock.sendall(json_string)
-			print('\nSent', json_string)
-
-		except OSError as err:
-			if err.errno == 104:  # ECONNRESET
-				print("send_button_events OS error ECONNRESET:", err)
-			else:
-				print("send_button_events OS error:", err)
-
-			mode = 'SearchModes'
-			print('\n======== END Connected Modes ========\n')
-			print('\n======== BEGIN Search Modes ========\n')
-
-	return sock, json_tree, mode
 
 
 def get_rssi(wlan):
