@@ -31,40 +31,31 @@ def check_receive(sock, mode):
 		data = decode_bytes_to_string(data)
 
 	if data:
-		print('Data Received', data)
+		print('\nData Received', data)
 
 	return sock, data, mode
 
 
-def check_led_data(data, led_dict, led_pin_vs_number_list):
-	print('\nDATA in check_led_data is', data)
-	if data[0] == '$':
-		# $ = led data
-		data = data[1:]
-		length = len(data) / 3
-		print(length)
-		print(data[0] == 'L')
-		print(data[1] in list(['1', '2', '3', '4', '5', '6', '7']))
-		byte_index = 0
-		for leds in list(range(int(length-1))):
-			print(byte_index, leds)
-			if data[byte_index] == '$':
-				byte_index = 0
+def check_led_data(data, led_dict):
+	if data[0] == '{':
+		data = json.loads(data)
+		print('\nDATA in check_led_data is', data)
+		json_tree_fragment_dict = dict(data)
 
-			if data[0+byte_index] == 'L' and data[1+byte_index] in list(['1', '2', '3', '4', '5', '6', '7']):
-				for pair in led_pin_vs_number_list:
-					if data[1+byte_index] == pair[1]:
-						if data[2+byte_index] == '1':
-							print(data[0+byte_index:2+byte_index], 'led True', data[2+byte_index])
-							led_dict[pair[0]].value(True)
-						elif data[2+byte_index] == '0':
-							print(data[0+byte_index:2+byte_index], 'led False', data[2+byte_index])
-							led_dict[pair[0]].value(False)
-						else:
-							print('check_led_data packet format error of', data[2+byte_index])
-				byte_index += 3
-			else:
-				continue
+		if 'led_objects' in json_tree_fragment_dict:
+			for led in json_tree_fragment_dict['led_objects']:
+				if 'value' in json_tree_fragment_dict['led_objects'][led]:
+					print('\npin', led, 'is', json_tree_fragment_dict['led_objects'][led]['value'])
+					if json_tree_fragment_dict['led_objects'][led]['value']:
+						led_dict[led].value(True)
+					else:
+						led_dict[led].value(False)
+				else:
+					print("\n'value' key is not in fragment of led dictionary",	led)
+		else:
+			print('\nled_objects not in fragment')
+	else:
+		pass  # print('\nDid not receive json formatted data in ', data)
 
 
 def decode_bytes_to_string(data):
@@ -108,7 +99,7 @@ def send_button_events(sock, json_tree, mode):
 		try:
 			# Send the whole string
 			sock.sendall(json_string)
-			print('Sent', json_string)
+			print('\nSent', json_string)
 
 		except OSError as err:
 			if err.errno == 104:  # ECONNRESET

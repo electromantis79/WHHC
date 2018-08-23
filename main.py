@@ -470,7 +470,7 @@ while 1:
 
 		# Check effect of received data
 		if data and data[0] != '[':
-			check_led_data(data, LedDict, LedPinVsNumberList)
+			check_led_data(data, LedDict)
 
 		# Check connection to wifi and reconnect
 		if not wlan.isconnected():
