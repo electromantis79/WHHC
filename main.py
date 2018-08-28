@@ -473,11 +473,15 @@ while 1:
 		# Format data
 		if data:
 			data, broadcast_flag = check_form_broadcast_flag(data)
-			data = convert_to_json_format(data)
+			index_list = find_substrings(data, 'JSON_FRAGMENT')
+			fragment_list = slice_fragments(data, index_list)
+			for fragment_index, fragment in enumerate(fragment_list):
+				fragment_list[fragment_index] = convert_to_json_format(fragment)
 
 		# Process data
 		if data:
-			check_led_data(data, LedDict)
+			for fragment in fragment_list:
+				check_led_data(fragment, LedDict)
 
 		# Check connection to wifi and reconnect
 		if not wlan.isconnected():

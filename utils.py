@@ -90,6 +90,14 @@ def check_receive(sock, mode):
 	return sock, data, mode
 
 
+def decode_bytes_to_string(data):
+	string = ''
+	for x, y in enumerate(data):
+		z = chr(data[x])
+		string = string + z
+	return string
+
+
 def check_form_broadcast_flag(data):
 	broadcast_flag = False
 	if data[0] == '#':
@@ -97,6 +105,40 @@ def check_form_broadcast_flag(data):
 		broadcast_flag = True
 		print('\nData received contained broadcast_flag')
 	return data, broadcast_flag
+
+
+def find_substrings(string, substring):
+	count = 0
+	index = 0
+	flag = True
+	index_list = list()
+	while flag:
+		a = string.find(substring, index)
+		if a == -1:
+			flag = False
+		else:
+			count += 1
+			index_list.append(a)
+			index = a + 1
+	print('index_list', index_list)
+	return index_list
+
+
+def slice_fragments(data, index_list):
+	fragment_list = list()
+	for count in list(range(len(index_list))):
+		if len(index_list) == 1:
+			fragment_list.append(data)
+		elif count == len(index_list) - 1:
+			fragment_list.append(data[index_list[-1]:])
+		else:
+			fragment_list.append(data[index_list[count]:index_list[count+1]])
+
+	for fragment_index, fragment in enumerate(fragment_list):
+		fragment_list[fragment_index] = fragment[len('JSON_FRAGMENT'):]
+
+	print('fragment_list', fragment_list)
+	return fragment_list
 
 
 def convert_to_json_format(data):
@@ -113,7 +155,7 @@ def check_led_data(json_tree_fragment_dict, led_dict):
 		if 'led_objects' in json_tree_fragment_dict:
 			for led in json_tree_fragment_dict['led_objects']:
 				if 'value' in json_tree_fragment_dict['led_objects'][led]:
-					print('\npin', led, 'is', json_tree_fragment_dict['led_objects'][led]['value'])
+					# print('\npin', led, 'is', json_tree_fragment_dict['led_objects'][led]['value'])
 					if json_tree_fragment_dict['led_objects'][led]['value']:
 						led_dict[led].value(True)
 					else:
@@ -122,14 +164,6 @@ def check_led_data(json_tree_fragment_dict, led_dict):
 					print("\n'value' key is not in fragment of led dictionary",	led)
 		else:
 			print('\nled_objects not in fragment')
-
-
-def decode_bytes_to_string(data):
-	string = ''
-	for x, y in enumerate(data):
-		z = chr(data[x])
-		string = string + z
-	return string
 
 
 def get_rssi(wlan):
