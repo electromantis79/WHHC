@@ -472,7 +472,6 @@ while 1:
 
 		# Format data
 		if data:
-			data, broadcast_flag = check_form_broadcast_flag(data)
 			index_list = find_substrings(data, 'JSON_FRAGMENT')
 			fragment_list = slice_fragments(data, index_list)
 			for fragment_index, fragment in enumerate(fragment_list):

@@ -41,6 +41,7 @@ def send_events(sock, message, mode):
 		# Send some data to remote server
 		# Connect to remote server
 		json_string = json.dumps(message)
+		json_string = 'JSON_FRAGMENT' + json_string
 		try:
 			# Send the whole string
 			sock.sendall(json_string)
@@ -98,15 +99,6 @@ def decode_bytes_to_string(data):
 	return string
 
 
-def check_form_broadcast_flag(data):
-	broadcast_flag = False
-	if data[0] == '#':
-		data = data[1:]
-		broadcast_flag = True
-		print('\nData received contained broadcast_flag')
-	return data, broadcast_flag
-
-
 def find_substrings(string, substring):
 	count = 0
 	index = 0
@@ -145,8 +137,8 @@ def convert_to_json_format(data):
 	try:
 		data = json.loads(data)
 		return data
-	except:
-		print('\nData received failed json format inspection')
+	except Exception as e:
+		print('\n', e, ': Data received failed json format inspection')
 		return False
 
 
