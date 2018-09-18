@@ -5,6 +5,7 @@ import sys
 import time
 import pycom
 import json
+import _thread
 
 from network import WLAN
 from machine import Pin
@@ -29,6 +30,22 @@ def button_event(pin):  # Pin Callback
 		# print('ButtEventDict[pin.id()]', last_state)
 
 
+def get_rssi_thread(wlan):
+	global rssi, rssiThreadRunning
+	before = time.ticks_ms()
+
+	nets = wlan.scan()
+	for net in nets:
+		if net.ssid == 'ScoreNet':
+			rssi = net.rssi
+			print('RSSI =', rssi)
+			rssi = str(rssi)[1:]
+			rssi = int(rssi)
+	after = time.ticks_ms()
+	print('Send RSSI', str(rssi), '- took', str((after - before) / 1000), 'seconds')
+	rssiThreadRunning = False
+
+
 # Initialize ---------------------------------------------------
 
 # Constants
@@ -41,6 +58,8 @@ AUTH = (WLAN.WPA2, 'centari008')
 
 message = None
 rssi = None
+rssiThreadRunning = False
+sendRssiCount = 0
 SearchTimeoutDuration = 20
 BatteryTimeoutDuration = 3
 LongPressTimeoutDuration = 2.5
@@ -481,6 +500,24 @@ while 1:
 		if data:
 			for fragment in fragment_list:
 				check_led_data(fragment, LedDict)
+				check_get_rssi_flag(fragment, JsonTreeDict)
+
+		# React to data
+		if JsonTreeDict['command_flags']['get_rssi']:
+			if not rssiThreadRunning:
+				time.sleep(0.5)
+				rssiThreadRunning = True
+				_thread.start_new_thread(get_rssi_thread, [wlan])
+				print('after thread start', time.ticks_ms(), 'rssi =', rssi)
+			else:
+				if sendRssiCount >= 50:
+					sendRssiCount = 0
+					if rssi is not None:
+						json_tree_fragment_dict = build_rssi_fragment_dict(rssi)
+						sock, mode = send_events(sock, json_tree_fragment_dict, mode)
+						print('rssi sent', time.ticks_ms())
+				else:
+					sendRssiCount += 1
 
 		# Check connection to wifi and reconnect
 		if not wlan.isconnected():

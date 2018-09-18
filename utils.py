@@ -36,6 +36,12 @@ def build_json_tree_fragment_dict(json_tree):
 	return temp_dict
 
 
+def build_rssi_fragment_dict(value):
+	temp_dict = dict()
+	temp_dict['rssi'] = value
+	return temp_dict
+
+
 def send_events(sock, message, mode):
 	if message:
 		# Send some data to remote server
@@ -64,7 +70,7 @@ def check_receive(sock, mode):
 	# print('\nenter check_receive')
 	data = None
 	try:
-		data = sock.recv(4096)
+		data = sock.read()
 
 	except OSError as err:
 		# print (err, err.errno)
@@ -158,16 +164,15 @@ def check_led_data(json_tree_fragment_dict, led_dict):
 			print('\nled_objects not in fragment')
 
 
-def get_rssi(wlan):
-	nets = wlan.scan()
-	rssi = None
-	for net in nets:
-		if net.ssid == 'ScoreNet':
-			rssi = net.rssi
-			rssi = str(rssi)[1:]
-			print('RSSI =', rssi)
-
-	return rssi
+def check_get_rssi_flag(json_tree_fragment_dict, json_tree):
+	if json_tree_fragment_dict is not None:
+		if 'command_flags' in json_tree_fragment_dict:
+			if 'get_rssi' in json_tree_fragment_dict['command_flags']:
+				json_tree['command_flags']['get_rssi'] = json_tree_fragment_dict['command_flags']['get_rssi']
+			else:
+				print('\nget_rssi not in command_flags')
+		else:
+			print('\ncommand_flags not in fragment')
 
 
 def get_battery_voltage(show=0):
@@ -214,7 +219,6 @@ def get_battery_voltage(show=0):
 def build_json_tree(
 		led_dict, button_dict, led_info_dict, button_info_dict):
 	json_tree = dict()
-	json_tree['object_type'] = 'Pin'
 	json_tree['led_objects'] = dict()
 	json_tree['led_objects']['component_type'] = 'led'
 	for led in led_dict:
@@ -241,4 +245,6 @@ def build_json_tree(
 		json_tree['button_objects'][button]['event_flag'] = False
 		json_tree['button_objects'][button]['event_state'] = 'up'
 
+	json_tree['command_flags'] = dict()
+	json_tree['command_flags']['get_rssi'] = False
 	return json_tree
