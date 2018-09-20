@@ -66,7 +66,7 @@ def send_events(sock, message, mode):
 	return sock, mode
 
 
-def check_receive(sock, mode):
+def check_receive(sock, mode, socket_created_flag):
 	# print('\nenter check_receive')
 	data = None
 	try:
@@ -85,6 +85,10 @@ def check_receive(sock, mode):
 		else:
 			print("check_receive OS error GENERIC:", err)
 		mode = 'SearchModes'
+
+		sock.close()
+		socket_created_flag = False
+
 		print('\n======== END Connected Modes ========\n')
 		print('\n======== BEGIN Search Modes ========\n')
 
@@ -94,7 +98,7 @@ def check_receive(sock, mode):
 	if data:
 		print('\nData Received', time.ticks_us()/1000, 'ms:', data)
 
-	return sock, data, mode
+	return sock, data, mode, socket_created_flag
 
 
 def decode_bytes_to_string(data):

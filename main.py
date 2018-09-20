@@ -71,6 +71,8 @@ ReceiverDiscoveredFlag = False
 TransferFilesFlag = False
 TransferFilesCompleteFlag = False
 SocketConnectedFlag = False
+socketCreatedFlag = False
+socketCreatedCount = 0
 mode = 'SearchModes'
 
 # LED definitions ==========================================
@@ -398,17 +400,22 @@ while 1:
 		if wlan.isconnected() and mode != 'PoweringDownMode':
 
 			if not SocketConnectedFlag:
-				# Create and connect a socket
-				try:
-					# Create an AF_INET, STREAM socket (TCP)
-					sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-					print('Socket Created')
 
-				except OSError as err:
-					print("create_socket OS error:", err)
-					print('Failed to create socket.')
-					time.sleep_ms(500)
-					machine.reset()
+				if not socketCreatedFlag:
+					# Create and connect a socket
+					try:
+						# Create an AF_INET, STREAM socket (TCP)
+						sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+						print('Socket Created', time.ticks_us()/1000, 'ms:')
+						socketCreatedFlag = True
+						SearchBatteryTestModeFlag = False
+						led_sequence.timer.start()
+
+					except OSError as err:
+						print("create_socket OS error:", err)
+						print('Failed to create socket.')
+						time.sleep_ms(500)
+						machine.reset()
 
 				try:
 					sock.connect((HOST, PORT))
@@ -418,10 +425,12 @@ while 1:
 
 				except OSError as err:
 					print("connect_socket OS error:", err)
-					print('Failed to connect to ' + HOST)
-					sock.close()
-					del sock
-					time.sleep_ms(50)
+					print('Failed to connect to ' + HOST, ': socketCreatedCount', socketCreatedCount)
+					socketCreatedCount += 1
+					if socketCreatedCount > 200:
+						socketCreatedCount = 0
+						socketCreatedFlag = False
+						print('Kick New Socket Creation', time.ticks_us()/1000, 'ms:')
 
 			if SocketConnectedFlag:
 				SocketConnectedFlag = False
@@ -493,7 +502,7 @@ while 1:
 			sock, mode = send_events(sock, json_tree_fragment_dict, mode)
 
 		# Check for data
-		sock, data, mode = check_receive(sock, mode)
+		sock, data, mode, socketCreatedFlag = check_receive(sock, mode, socketCreatedFlag)
 
 		# Format data
 		if data:
