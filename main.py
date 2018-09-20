@@ -85,7 +85,7 @@ LedDict['P6'] = Pin('P6', mode=Pin.OUT)  # PIN_18 = LED_7 = batteryLed
 
 # LedDict['P2'] = Pin('P2', mode = Pin.OUT)#WiPy Heartbeat pin
 LedPinList = list(LedDict.keys())
-print('\nLedDict', LedDict)
+# print('\nLedDict', LedDict)
 
 # Turn all off
 for x in LedPinList:
@@ -138,7 +138,7 @@ ButtDict['P14'] = Pin(
 ButtDict['P13'] = Pin(
 	'P13', mode=Pin.IN, pull=Pin.PULL_UP)  # PIN_12 = BUTT_9 = KEY_1 = guestPlusButt = RESET 1
 ButtPinList = list(ButtDict.keys())
-print('\nButtDict', ButtDict, '\nButtPinList', ButtPinList)
+# print('\nButtDict', ButtDict, '\nButtPinList', ButtPinList)
 
 ButtEventDict = dict.fromkeys(ButtPinList, 0)
 # print('\nButtEventDict', ButtEventDict)
@@ -192,13 +192,13 @@ for pin in KeyMapDict:
 # Build JSON hierarchy ==========================================
 JsonTreeDict = build_json_tree(LedDict, ButtDict, LedInfoDict, ButtonInfoDict)
 # print('\nJsonTreeDict', JsonTreeDict)
-
+'''
 # Write tree.json file
 with open('tree.json', 'w') as f:
 	json_string = json.dumps(JsonTreeDict)
 	f.write(json_string)
 # print('\njson_string', json_string)
-
+'''
 
 # Timers
 search_mode_timer = Timer.Chrono()
@@ -221,14 +221,20 @@ if machine.reset_cause() == machine.DEEPSLEEP_RESET:
 
 		if ButtEventDict[button] == 1:
 			# Down Press
-			print('\nDown Press', button)
+			print('\nDown Press - LEDs on', button)
 			ButtEventDict[button] = 2
+			# Turn all on
+			for x in LedPinList:
+				LedDict[x].value(True)
 
 		elif ButtEventDict[button] == 3:
 			# Up Press
 			print('\nUp Press', button)
 			ButtEventDict[button] = 0
 			print('\nRECOVER from Sleep Mode\n')
+			# Turn all off
+			for x in LedPinList:
+				LedDict[x].value(False)
 			break
 
 # Test voltage sense function
