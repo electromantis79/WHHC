@@ -18,7 +18,13 @@ class LedSequences(object):
 		self.LedDict = led_dict
 		self.timer = Timer.Chrono()
 		self.transfer_cycle_flag = False
-	
+
+	def all_off(self):
+		# Turn all off
+		for x in self.LedDict:
+			self.LedDict[x].value(False)
+		print('All LEDs Off')
+
 	def power_on(self, enable=False):
 		"""ONE SHOT - Self Stop"""
 		if enable:

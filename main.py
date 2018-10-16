@@ -89,11 +89,10 @@ LedDict['P6'] = Pin('P6', mode=Pin.OUT)  # PIN_18 = LED_7 = batteryLed
 LedPinList = list(LedDict.keys())
 # print('\nLedDict', LedDict)
 
-# Turn all off
-for x in LedPinList:
-	LedDict[x].value(False)
-
 led_sequence = LedSequences(LedDict)
+
+# Turn all off
+led_sequence.all_off()
 
 # Build LedInfoDict ----------------------------------------
 LedInfoDict = dict.fromkeys(LedPinList)
@@ -454,6 +453,10 @@ while 1:
 				print('\n======== END Search Modes ========\n')
 				print('\n======== BEGIN Discovered Mode ========\n')
 				ReceiverDiscoveredFlag = True
+
+				# Rebuild fresh json tree
+				led_sequence.all_off()
+				JsonTreeDict = build_json_tree(LedDict, ButtDict, LedInfoDict, ButtonInfoDict)
 
 	elif mode == 'DiscoveredMode':
 		ReceiverDiscoveredFlag = led_sequence.receiver_discovered(ReceiverDiscoveredFlag)
