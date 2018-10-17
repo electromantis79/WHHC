@@ -13,6 +13,10 @@ from machine import Timer
 from utils import *
 from led_sequences import LedSequences
 
+print('\nTop of main.py after imports', time.ticks_us() / 1000, 'ms')
+
+# Functions using global must be in the main.py file for some reason
+
 
 def button_event(pin):  # Pin Callback
 	global ButtEventDict
@@ -74,21 +78,6 @@ SocketConnectedFlag = False
 socketCreatedFlag = False
 socketCreatedCount = 0
 mode = 'SearchModes'
-
-# LED definitions ==========================================
-LedDict = dict()
-LedDict['P20'] = Pin('P20', mode=Pin.OUT)  # PIN_2  = LED_5 = topLed = PWM_1[5]
-LedDict['P11'] = Pin('P11', mode=Pin.OUT)  # PIN_13 = LED_6 = signalLed
-LedDict['P10'] = Pin('P10', mode=Pin.OUT)  # PIN_14 = LED_4 = strengthLedTop
-LedDict['P9'] = Pin('P9', mode=Pin.OUT)  # PIN_15 = LED_3 = strengthLedMiddleTop
-LedDict['P8'] = Pin('P8', mode=Pin.OUT)   # PIN_16 = LED_2 = strengthLedMiddleBottom
-LedDict['P7'] = Pin('P7', mode=Pin.OUT)   # PIN_17 = LED_1 = strengthLedBottom
-LedDict['P6'] = Pin('P6', mode=Pin.OUT)  # PIN_18 = LED_7 = batteryLed
-
-# LedDict['P2'] = Pin('P2', mode = Pin.OUT)#WiPy Heartbeat pin
-LedPinList = list(LedDict.keys())
-# print('\nLedDict', LedDict)
-
 led_sequence = LedSequences(LedDict)
 
 # Turn all off
@@ -114,42 +103,6 @@ LedPinVsFunctionNameList = [
 	('P8', 'strengthLedMiddleBottom'), ('P7', 'strengthLedBottom'), ('P6', 'batteryLed')]
 for pin in LedPinVsFunctionNameList:
 	LedInfoDict[pin[0]]['function_name'] = pin[1]
-
-
-# 10-Button Baseball Keypad definitions ===================
-ButtDict = dict()
-ButtDict['P23'] = Pin(
-	'P23', mode=Pin.IN, pull=Pin.PULL_UP)  # PIN_19 = BUTT_0 = KEY_10 = modeButt
-ButtDict['P5'] = Pin(
-	'P5', mode=Pin.IN, pull=Pin.PULL_UP)  # PIN_4 = BUTT_1 = KEY_9 = outPlusButt = CX_DETECT
-ButtDict['P4'] = Pin(
-	'P4', mode=Pin.IN, pull=Pin.PULL_UP)  # PIN_5 = BUTT_2 = KEY_8 = strikePlusButt =  = LED2_IN
-ButtDict['P3'] = Pin(
-	'P3', mode=Pin.IN, pull=Pin.PULL_UP)  # PIN_6 = BUTT_3 = KEY_7 = ballPlusButt = PIC_RX2/LED1_IN
-ButtDict['P18'] = Pin(
-	'P18', mode=Pin.IN, pull=Pin.PULL_UP)  # PIN_7 = BUTT_4 = KEY_6 = homeMinusButt = RUN
-ButtDict['P17'] = Pin(
-	'P17', mode=Pin.IN, pull=Pin.PULL_UP)  # PIN_8 = BUTT_5 = KEY_5 = inningPlusButt = STOP
-ButtDict['P16'] = Pin(
-	'P16', mode=Pin.IN, pull=Pin.PULL_UP)  # PIN_9 = BUTT_6 = KEY_4 = guestMinusButt = RUN/STOP CLOCK
-ButtDict['P15'] = Pin(
-	'P15', mode=Pin.IN, pull=Pin.PULL_UP)  # PIN_10 = BUTT_7 = KEY_3 = homePlusButt = RUN/STOP DGT
-ButtDict['P14'] = Pin(
-	'P14', mode=Pin.IN, pull=Pin.PULL_UP)  # PIN_11 = BUTT_8 = KEY_2 = clockToggleButt = RESET 2
-ButtDict['P13'] = Pin(
-	'P13', mode=Pin.IN, pull=Pin.PULL_UP)  # PIN_12 = BUTT_9 = KEY_1 = guestPlusButt = RESET 1
-ButtPinList = list(ButtDict.keys())
-# print('\nButtDict', ButtDict, '\nButtPinList', ButtPinList)
-
-ButtEventDict = dict.fromkeys(ButtPinList, 0)
-# print('\nButtEventDict', ButtEventDict)
-
-# Button Interrupts
-for x in ButtPinList:
-	ButtDict[x].callback(trigger=Pin.IRQ_FALLING | Pin.IRQ_RISING, handler=button_event)
-
-machine.pin_deepsleep_wakeup(['P23'], machine.WAKEUP_ALL_LOW, enable_pull=True)
-
 
 # Build ButtonInfoDict -----------------------------------
 ButtonInfoDict = dict.fromkeys(ButtPinList)
@@ -193,50 +146,17 @@ for pin in KeyMapDict:
 # Build JSON hierarchy ==========================================
 JsonTreeDict = build_json_tree(LedDict, ButtDict, LedInfoDict, ButtonInfoDict)
 # print('\nJsonTreeDict', JsonTreeDict)
-'''
+
 # Write tree.json file
 with open('tree.json', 'w') as f:
 	json_string = json.dumps(JsonTreeDict)
 	f.write(json_string)
 # print('\njson_string', json_string)
-'''
 
 # Timers
 search_mode_timer = Timer.Chrono()
 battery_mode_timer = Timer.Chrono()
 long_press_timer = Timer.Chrono()
-
-if machine.reset_cause() == machine.DEEPSLEEP_RESET:
-	# sleep if button not being held then continue on release
-	print('\nReturn from DEEP SLEEP')
-	if not ButtDict['P23'].value():
-		button = 'P23'
-		ButtEventDict[button] = 1
-	else:
-		print('ENTER deep sleep AGAIN\n')
-		machine.deepsleep()
-
-	while 1:
-		machine.idle()
-		time.sleep_ms(50)
-
-		if ButtEventDict[button] == 1:
-			# Down Press
-			print('\nDown Press - LEDs on', button)
-			ButtEventDict[button] = 2
-			# Turn all on
-			for x in LedPinList:
-				LedDict[x].value(True)
-
-		elif ButtEventDict[button] == 3:
-			# Up Press
-			print('\nUp Press', button)
-			ButtEventDict[button] = 0
-			print('\nRECOVER from Sleep Mode\n')
-			# Turn all off
-			for x in LedPinList:
-				LedDict[x].value(False)
-			break
 
 # Test voltage sense function
 vbatt = get_battery_voltage(1)
@@ -519,6 +439,7 @@ while 1:
 			for fragment in fragment_list:
 				check_led_data(fragment, LedDict)
 				check_get_rssi_flag(fragment, JsonTreeDict)
+				check_power_down_flag(fragment, JsonTreeDict)
 
 		# React to data
 		if JsonTreeDict['command_flags']['get_rssi']:
@@ -537,8 +458,16 @@ while 1:
 				else:
 					sendRssiCount += 1
 
+		if JsonTreeDict['command_flags']['power_down']:
+			print('\n======== END Connected Modes ========\n')
+			print('\n======== BEGIN Power Off Sequence Mode ========\n')
+			mode = 'PoweringDownMode'
+			led_sequence.timer.stop()
+			led_sequence.timer.reset()
+			led_sequence.timer.start()
+
 		# Check connection to wifi and reconnect
-		if not wlan.isconnected():
+		if not wlan.isconnected() and not JsonTreeDict['command_flags']['power_down']:
 			mode = 'SearchModes'
 			print('\n======== END Connected Modes ========\n')
 			print('\n======== BEGIN Search Modes ========\n')

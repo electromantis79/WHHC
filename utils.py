@@ -179,6 +179,17 @@ def check_get_rssi_flag(json_tree_fragment_dict, json_tree):
 			print('\ncommand_flags not in fragment')
 
 
+def check_power_down_flag(json_tree_fragment_dict, json_tree):
+	if json_tree_fragment_dict is not None:
+		if 'command_flags' in json_tree_fragment_dict:
+			if 'power_down' in json_tree_fragment_dict['command_flags']:
+				json_tree['command_flags']['power_down'] = json_tree_fragment_dict['command_flags']['power_down']
+			else:
+				print('\npower_down not in command_flags')
+		else:
+			print('\ncommand_flags not in fragment')
+
+
 def get_battery_voltage(show=0):
 	"""
 	typedef enum {
@@ -251,4 +262,5 @@ def build_json_tree(
 
 	json_tree['command_flags'] = dict()
 	json_tree['command_flags']['get_rssi'] = False
+	json_tree['command_flags']['power_down'] = False
 	return json_tree
