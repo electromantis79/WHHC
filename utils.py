@@ -33,6 +33,7 @@ def build_json_tree_fragment_dict(json_tree):
 			temp_dict['button_objects'][button]['event_state'] = json_tree['button_objects'][button]['event_state']
 			temp_dict['button_objects'][button]['keymap_grid_value'] = json_tree['button_objects'][button]['keymap_grid_value']
 			json_tree['button_objects'][button]['event_flag'] = False
+
 	return temp_dict
 
 
@@ -190,6 +191,30 @@ def check_power_down_flag(json_tree_fragment_dict, json_tree):
 			print('\ncommand_flags not in fragment')
 
 
+def check_signal_strength_display_flag(json_tree_fragment_dict, json_tree):
+	if json_tree_fragment_dict is not None:
+		if 'command_flags' in json_tree_fragment_dict:
+			if 'signal_strength_display' in json_tree_fragment_dict['command_flags']:
+				json_tree['command_flags']['signal_strength_display'] = json_tree_fragment_dict[
+					'command_flags']['signal_strength_display']
+			else:
+				print('\nsignal_strength_display not in command_flags')
+		else:
+			print('\ncommand_flags not in fragment')
+
+
+def check_battery_strength_display_flag(json_tree_fragment_dict, json_tree):
+	if json_tree_fragment_dict is not None:
+		if 'command_flags' in json_tree_fragment_dict:
+			if 'battery_strength_display' in json_tree_fragment_dict['command_flags']:
+				json_tree['command_flags']['battery_strength_display'] = json_tree_fragment_dict[
+					'command_flags']['battery_strength_display']
+			else:
+				print('\nbattery_strength_display not in command_flags')
+		else:
+			print('\ncommand_flags not in fragment')
+
+
 def get_battery_voltage(show=0):
 	"""
 	typedef enum {
@@ -258,9 +283,14 @@ def build_json_tree(
 		json_tree['button_objects'][button]['keypad_key_number'] = button_info_dict[button]['keypad_key_number']
 		json_tree['button_objects'][button]['keymap_grid_value'] = button_info_dict[button]['keymap_grid_value']
 		json_tree['button_objects'][button]['event_flag'] = False
+		json_tree['button_objects'][button]['event_time'] = 0.0
 		json_tree['button_objects'][button]['event_state'] = 'up'
 
 	json_tree['command_flags'] = dict()
 	json_tree['command_flags']['get_rssi'] = False
 	json_tree['command_flags']['power_down'] = False
+	json_tree['command_flags']['signal_strength_display'] = False
+	json_tree['command_flags']['battery_strength_display'] = False
+
+	json_tree['rssi'] = None
 	return json_tree

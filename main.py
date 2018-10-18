@@ -440,11 +440,13 @@ while 1:
 				check_led_data(fragment, LedDict)
 				check_get_rssi_flag(fragment, JsonTreeDict)
 				check_power_down_flag(fragment, JsonTreeDict)
+				check_signal_strength_display_flag(fragment, JsonTreeDict)
+				check_battery_strength_display_flag(fragment, JsonTreeDict)
 
 		# React to data
 		if JsonTreeDict['command_flags']['get_rssi']:
 			if not rssiThreadRunning:
-				time.sleep(0.5)
+				time.sleep(1)
 				rssiThreadRunning = True
 				_thread.start_new_thread(get_rssi_thread, [wlan])
 				print('after thread start', time.ticks_ms(), 'rssi =', rssi)
@@ -465,6 +467,14 @@ while 1:
 			led_sequence.timer.stop()
 			led_sequence.timer.reset()
 			led_sequence.timer.start()
+
+		if JsonTreeDict['command_flags']['signal_strength_display']:
+			JsonTreeDict['command_flags']['signal_strength_display'] = False
+			print('\nsignal_strength_display activated')
+
+		if JsonTreeDict['command_flags']['battery_strength_display']:
+			JsonTreeDict['command_flags']['battery_strength_display'] = False
+			print('\nbattery_strength_display activated')
 
 		# Check connection to wifi and reconnect
 		if not wlan.isconnected() and not JsonTreeDict['command_flags']['power_down']:
