@@ -62,8 +62,11 @@ AUTH = (WLAN.WPA2, 'centari008')
 
 message = None
 rssi = None
+vbatt = None
 rssiThreadRunning = False
 sendRssiCount = 0
+battery_strength_display = False
+battery_strength_display_count = 0
 SearchTimeoutDuration = 20
 BatteryTimeoutDuration = 3
 LongPressTimeoutDuration = 2.5
@@ -212,7 +215,7 @@ while 1:
 
 		# LED Sequences
 		led_sequence.searching_for_receiver(not SearchBatteryTestModeFlag)
-		led_sequence.battery_test(SearchBatteryTestModeFlag)
+		led_sequence.battery_test(enable=True, on_off=SearchBatteryTestModeFlag)
 
 		# Search Mode Timer Check
 		if search_mode_timer.read() > SearchTimeoutDuration:
@@ -231,6 +234,7 @@ while 1:
 			led_sequence.timer.start()
 			# ENTER Search Mode
 			SearchBatteryTestModeFlag = False
+			led_sequence.battery_test(enable=True, on_off=SearchBatteryTestModeFlag)
 			print('\n======== END Search Battery Test Mode ========\n')
 			print('\n======== BEGIN Search Mode ========\n')
 			search_mode_timer.stop()
@@ -329,6 +333,7 @@ while 1:
 						socketCreatedFlag = True
 						SearchBatteryTestModeFlag = False
 						led_sequence.timer.start()
+						search_mode_timer.start()
 
 					except OSError as err:
 						print("create_socket OS error:", err)
@@ -437,7 +442,8 @@ while 1:
 		# Process data
 		if data:
 			for fragment in fragment_list:
-				check_led_data(fragment, LedDict)
+				if not battery_strength_display:
+					check_led_data(fragment, LedDict)
 				check_get_rssi_flag(fragment, JsonTreeDict)
 				check_power_down_flag(fragment, JsonTreeDict)
 				check_signal_strength_display_flag(fragment, JsonTreeDict)
@@ -475,6 +481,18 @@ while 1:
 		if JsonTreeDict['command_flags']['battery_strength_display']:
 			JsonTreeDict['command_flags']['battery_strength_display'] = False
 			print('\nbattery_strength_display activated')
+			battery_strength_display = True
+			led_sequence.battery_test(enable=True, on_off=battery_strength_display)
+			print('\nbattery_strength_display start', time.ticks_us() / 1000, 'ms')
+
+		if battery_strength_display:
+			if battery_strength_display_count >= 50:  # Measured once to take 2.922s
+				battery_strength_display_count = 0
+				battery_strength_display = False
+				led_sequence.battery_test(enable=True, on_off=battery_strength_display)
+				print('\nbattery_strength_display stop', time.ticks_us() / 1000, 'ms')
+			else:
+				battery_strength_display_count += 1
 
 		# Check connection to wifi and reconnect
 		if not wlan.isconnected() and not JsonTreeDict['command_flags']['power_down']:

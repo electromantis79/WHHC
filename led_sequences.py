@@ -1,4 +1,5 @@
 from machine import Timer
+from utils import *
 
 
 class LedSequences(object):
@@ -24,6 +25,12 @@ class LedSequences(object):
 		for x in self.LedDict:
 			self.LedDict[x].value(False)
 		print('All LEDs Off')
+
+	def all_on(self):
+		# Turn all on
+		for x in self.LedDict:
+			self.LedDict[x].value(True)
+		print('All LEDs On')
 
 	def power_on(self, enable=False):
 		"""ONE SHOT - Self Stop"""
@@ -227,19 +234,32 @@ class LedSequences(object):
 				enable = False
 		return enable
 
-	def battery_test(self, enable=False):
+	def battery_test(self, enable=False, on_off=True):
 		"""Continue this method while in this mode (until timeout)"""
 		if enable:
-			print('[Signal Strength] = OFF')
-			self.LedDict['P11'].value(False)
-			print('[Battery  Strength] = ON')
-			self.LedDict['P6'].value(True)
-			print('[Bar 1], [Bar 2], [Bar 3], [Bar 4] show battery strength')
-			self.LedDict['P7'].value(True)
-			self.LedDict['P8'].value(True)
-			self.LedDict['P9'].value(True)
-			self.LedDict['P10'].value(False)
-			print('battery_test_sequence END')
+			if on_off:
+				vbatt = get_battery_voltage()
+				print('[Signal Strength] = OFF')
+				self.LedDict['P11'].value(False)
+				print('[Battery  Strength] = ON')
+				self.LedDict['P6'].value(True)
+				print('[Bar 1], [Bar 2], [Bar 3], [Bar 4] show battery strength')
+				self.LedDict['P7'].value(True)
+				self.LedDict['P8'].value(True)
+				self.LedDict['P9'].value(True)
+				self.LedDict['P10'].value(False)
+				print('battery_test_sequence END')
+			else:
+				print('[Signal Strength] = OFF')
+				self.LedDict['P11'].value(False)
+				print('[Battery  Strength] = OFF')
+				self.LedDict['P6'].value(False)
+				print('[Bar 1], [Bar 2], [Bar 3], [Bar 4] = OFF')
+				self.LedDict['P7'].value(False)
+				self.LedDict['P8'].value(False)
+				self.LedDict['P9'].value(False)
+				self.LedDict['P10'].value(False)
+				print('battery_test_sequence END')
 		return enable
 
 	def connected_dark(self, enable=False):
