@@ -67,10 +67,13 @@ rssiThreadRunning = False
 sendRssiCount = 0
 battery_strength_display = False
 battery_strength_display_count = 0
-SearchTimeoutDuration = 20
+SearchTimeoutDuration = 60
 BatteryTimeoutDuration = 3
 LongPressTimeoutDuration = 2.5
+ConnectedDarkTimeoutDuration = 10
+ConnectedPowerDownTimeoutDuration = 60
 MainLoopFrequencyMs = 50
+darkFlag = False
 PowerOffSequenceFlag = True
 PowerOnSequenceFlag = True
 SearchBatteryTestModeFlag = False
@@ -160,6 +163,7 @@ with open('tree.json', 'w') as f:
 search_mode_timer = Timer.Chrono()
 battery_mode_timer = Timer.Chrono()
 long_press_timer = Timer.Chrono()
+connected_mode_power_down_timer = Timer.Chrono()
 
 # Test voltage sense function
 vbatt = get_battery_voltage(1)
@@ -215,7 +219,7 @@ while 1:
 
 		# LED Sequences
 		led_sequence.searching_for_receiver(not SearchBatteryTestModeFlag)
-		led_sequence.battery_test(enable=True, on_off=SearchBatteryTestModeFlag)
+		led_sequence.battery_test(enable=SearchBatteryTestModeFlag, on_off=True)
 
 		# Search Mode Timer Check
 		if search_mode_timer.read() > SearchTimeoutDuration:
@@ -234,7 +238,7 @@ while 1:
 			led_sequence.timer.start()
 			# ENTER Search Mode
 			SearchBatteryTestModeFlag = False
-			led_sequence.battery_test(enable=True, on_off=SearchBatteryTestModeFlag)
+			led_sequence.battery_test(enable=SearchBatteryTestModeFlag, on_off=False)
 			print('\n======== END Search Battery Test Mode ========\n')
 			print('\n======== BEGIN Search Mode ========\n')
 			search_mode_timer.stop()
@@ -401,6 +405,9 @@ while 1:
 				mode = 'ConnectedMode'
 				print('\n======== END Discovered Mode ========\n')
 				print('\n======== BEGIN Connected Modes ========\n')
+				connected_mode_power_down_timer.stop()
+				connected_mode_power_down_timer.reset()
+				connected_mode_power_down_timer.start()
 				led_sequence.timer.stop()
 				led_sequence.timer.reset()
 
@@ -417,15 +424,35 @@ while 1:
 			mode = 'ConnectedMode'
 			print('\n======== END Transfer Mode ========\n')
 			print('\n======== BEGIN Connected Modes ========\n')
+			connected_mode_power_down_timer.stop()
+			connected_mode_power_down_timer.reset()
+			connected_mode_power_down_timer.start()
 
 	elif mode == 'ConnectedMode':
 		# print('\nConnectedMode')
+
+		# Search Mode Timer Check
+		if connected_mode_power_down_timer.read() > ConnectedPowerDownTimeoutDuration:
+			print('\nconnected_mode_power_down_timer triggered at ', connected_mode_power_down_timer.read(), 's.')
+			connected_mode_power_down_timer.stop()
+			connected_mode_power_down_timer.reset()
+			# ENTER Sleep Mode
+			print('ENTER deep sleep\n')
+			machine.deepsleep()
+		elif connected_mode_power_down_timer.read() > ConnectedDarkTimeoutDuration and not darkFlag:
+			print('\nconnected_mode_dark_timer triggered at ', connected_mode_power_down_timer.read(), 's.')
+			led_sequence.all_off()
+			darkFlag = True
 
 		# Handle button events
 		JsonTreeDict, event_flag = handle_button_event(JsonTreeDict, ButtEventDict)
 
 		# Send button events to server
 		if event_flag:
+			connected_mode_power_down_timer.stop()
+			connected_mode_power_down_timer.reset()
+			connected_mode_power_down_timer.start()
+			darkFlag = False
 			json_tree_fragment_dict = build_json_tree_fragment_dict(JsonTreeDict)
 			sock, mode = send_events(sock, json_tree_fragment_dict, mode)
 
