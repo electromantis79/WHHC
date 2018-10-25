@@ -64,7 +64,7 @@ message = None
 rssi = None
 vbatt = None
 rssiThreadRunning = False
-sendRssiCount = 0
+startRssiThreadFlag = True
 battery_strength_display = False
 battery_strength_display_count = 0
 signal_strength_thread_flag = False
@@ -442,7 +442,9 @@ while 1:
 			# ENTER Sleep Mode
 			print('ENTER deep sleep\n')
 			machine.deepsleep()
-		elif connected_mode_power_down_timer.read() > ConnectedDarkTimeoutDuration and not darkFlag:
+		elif (
+				connected_mode_power_down_timer.read() > ConnectedDarkTimeoutDuration
+				and not darkFlag and not JsonTreeDict['command_flags']['get_rssi']):
 			print('\nconnected_mode_dark_timer triggered at ', connected_mode_power_down_timer.read(), 's.')
 			led_sequence.all_off()
 			darkFlag = True
@@ -479,23 +481,21 @@ while 1:
 				check_signal_strength_display_flag(fragment, JsonTreeDict)
 				check_battery_strength_display_flag(fragment, JsonTreeDict)
 
-		# React to data
+		# React to get_rssi
 		if JsonTreeDict['command_flags']['get_rssi']:
-			if not rssiThreadRunning:
-				time.sleep(1)
+			if startRssiThreadFlag:
+				startRssiThreadFlag = False
 				rssiThreadRunning = True
 				_thread.start_new_thread(get_rssi_thread, [wlan])
 				print('after thread start', time.ticks_ms(), 'rssi =', rssi)
-			else:
-				if sendRssiCount >= 50:
-					sendRssiCount = 0
-					if rssi is not None:
-						json_tree_fragment_dict = build_rssi_fragment_dict(rssi)
-						sock, mode = send_events(sock, json_tree_fragment_dict, mode)
-						print('rssi sent', time.ticks_ms())
-				else:
-					sendRssiCount += 1
 
+			if not rssiThreadRunning and rssi is not None:
+				json_tree_fragment_dict = build_rssi_fragment_dict(rssi)
+				sock, mode = send_events(sock, json_tree_fragment_dict, mode)
+				print('rssi sent', time.ticks_ms())
+				startRssiThreadFlag = True
+
+		# React to power_down event
 		if JsonTreeDict['command_flags']['power_down']:
 			print('\n======== END Connected Modes ========\n')
 			print('\n======== BEGIN Power Off Sequence Mode ========\n')
@@ -504,6 +504,7 @@ while 1:
 			led_sequence.timer.reset()
 			led_sequence.timer.start()
 
+		# React to signal_strength_display event
 		if JsonTreeDict['command_flags']['signal_strength_display']:
 			JsonTreeDict['command_flags']['signal_strength_display'] = False
 			print('\nsignal_strength_display activated')
@@ -514,6 +515,7 @@ while 1:
 			_thread.start_new_thread(get_rssi_thread, [wlan])
 			print('after thread start', time.ticks_ms(), 'rssi =', rssi)
 
+		# React to signal_strength_thread ending
 		if signal_strength_thread_flag and not JsonTreeDict['command_flags']['battery_strength_display'] and not battery_strength_display:
 			if not rssiThreadRunning:
 				signal_strength_thread_flag = False
@@ -522,6 +524,7 @@ while 1:
 					led_sequence.signal_test(enable=True, on_off=signal_strength_display, rssi=rssi)
 				print('\nsignal_strength_display start', time.ticks_us() / 1000, 'ms')
 
+		# React to signal_strength_display timing out
 		if signal_strength_display and not JsonTreeDict['command_flags']['battery_strength_display'] and not battery_strength_display:
 			if signal_strength_display_count >= 50:  # Measured once to take 2.922s
 				signal_strength_display_count = 0
@@ -531,6 +534,7 @@ while 1:
 			else:
 				signal_strength_display_count += 1
 
+		# React to battery_strength_display event
 		if JsonTreeDict['command_flags']['battery_strength_display']:
 			JsonTreeDict['command_flags']['battery_strength_display'] = False
 			print('\nbattery_strength_display activated')
@@ -540,6 +544,7 @@ while 1:
 			led_sequence.battery_test(enable=True, on_off=battery_strength_display)
 			print('\nbattery_strength_display start', time.ticks_us() / 1000, 'ms')
 
+		# React to battery_strength_display timing out
 		if battery_strength_display:
 			if battery_strength_display_count >= 50:  # Measured once to take 2.922s
 				battery_strength_display_count = 0
