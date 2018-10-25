@@ -15,14 +15,21 @@ class LedSequences(object):
 	LedDict['P6'] = Pin('P6', mode=Pin.OUT)  # PIN_18 = LED_7 = batteryLed
 	"""
 
-	def __init__(self, led_dict, bar_threshold=(1.8, 2.4, 2.7, 3.0)):
+	def __init__(
+			self, led_dict,
+			batt_bar_threshold=(1.8, 2.4, 2.7, 3.0), signal_bar_threshold=(70, 60, 50, 40)):
+
 		self.LedDict = led_dict
 		self.timer = Timer.Chrono()
 		self.transfer_cycle_flag = False
-		self.barThresholdOne = bar_threshold[0]
-		self.barThresholdTwo = bar_threshold[1]
-		self.barThresholdThree = bar_threshold[2]
-		self.barThresholdFour = bar_threshold[3]
+		self.battBarThresholdOne = batt_bar_threshold[0]
+		self.battBarThresholdTwo = batt_bar_threshold[1]
+		self.battBarThresholdThree = batt_bar_threshold[2]
+		self.battBarThresholdFour = batt_bar_threshold[3]
+		self.signalBarThresholdZero = signal_bar_threshold[0]
+		self.signalBarThresholdOne = signal_bar_threshold[1]
+		self.signalBarThresholdTwo = signal_bar_threshold[2]
+		self.signalBarThresholdThree = signal_bar_threshold[3]
 
 	def all_off(self):
 		# Turn all off
@@ -238,17 +245,16 @@ class LedSequences(object):
 				enable = False
 		return enable
 
-	def battery_test(self, enable=False, on_off=True):
+	def signal_test(self, enable=False, on_off=True, rssi=None):
 		"""Continue this method while in this mode (until timeout)"""
 		if enable:
 			if on_off:
-				vbatt = get_battery_voltage(1)
-				print('[Signal Strength] = OFF')
-				self.LedDict['P11'].value(False)
-				print('[Battery  Strength] = ON')
-				self.LedDict['P6'].value(True)
-				print('[Bar 1], [Bar 2], [Bar 3], [Bar 4] show battery strength', vbatt, 'V')
-				self._set_bars(vbatt)
+				print('[Signal Strength] = ON')
+				self.LedDict['P11'].value(True)
+				print('[Battery  Strength] = OFF')
+				self.LedDict['P6'].value(False)
+				print('[Bar 1], [Bar 2], [Bar 3], [Bar 4] show battery strength -', rssi, 'dB')
+				self._set_signal_bars(rssi)
 				print('battery_test_sequence END')
 			else:
 				print('[Signal Strength] = OFF')
@@ -263,23 +269,75 @@ class LedSequences(object):
 				print('battery_test_sequence END')
 		return enable
 
-	def _set_bars(self, vbatt):
-		if vbatt > self.barThresholdFour:
-			self.LedDict['P10'].value(True)
-			self.LedDict['P9'].value(True)
-			self.LedDict['P8'].value(True)
-			self.LedDict['P7'].value(True)
-		elif vbatt > self.barThresholdThree:
+	def _set_signal_bars(self, rssi):
+		if rssi > self.signalBarThresholdZero:
 			self.LedDict['P10'].value(False)
-			self.LedDict['P9'].value(True)
-			self.LedDict['P8'].value(True)
+			self.LedDict['P9'].value(False)
+			self.LedDict['P8'].value(False)
+			self.LedDict['P7'].value(False)
+		elif rssi > self.signalBarThresholdOne:
+			self.LedDict['P10'].value(False)
+			self.LedDict['P9'].value(False)
+			self.LedDict['P8'].value(False)
 			self.LedDict['P7'].value(True)
-		elif vbatt > self.barThresholdTwo:
+		elif rssi > self.signalBarThresholdTwo:
 			self.LedDict['P10'].value(False)
 			self.LedDict['P9'].value(False)
 			self.LedDict['P8'].value(True)
 			self.LedDict['P7'].value(True)
-		elif vbatt > self.barThresholdOne:
+		elif rssi > self.signalBarThresholdThree:
+			self.LedDict['P10'].value(False)
+			self.LedDict['P9'].value(True)
+			self.LedDict['P8'].value(True)
+			self.LedDict['P7'].value(True)
+		else:
+			self.LedDict['P10'].value(True)
+			self.LedDict['P9'].value(True)
+			self.LedDict['P8'].value(True)
+			self.LedDict['P7'].value(True)
+
+	def battery_test(self, enable=False, on_off=True):
+		"""Continue this method while in this mode (until timeout)"""
+		if enable:
+			if on_off:
+				vbatt = get_battery_voltage(1)
+				print('[Signal Strength] = OFF')
+				self.LedDict['P11'].value(False)
+				print('[Battery  Strength] = ON')
+				self.LedDict['P6'].value(True)
+				print('[Bar 1], [Bar 2], [Bar 3], [Bar 4] show battery strength', vbatt, 'V')
+				self._set_batt_bars(vbatt)
+				print('battery_test_sequence END')
+			else:
+				print('[Signal Strength] = OFF')
+				self.LedDict['P11'].value(False)
+				print('[Battery  Strength] = OFF')
+				self.LedDict['P6'].value(False)
+				print('[Bar 1], [Bar 2], [Bar 3], [Bar 4] = OFF')
+				self.LedDict['P10'].value(False)
+				self.LedDict['P9'].value(False)
+				self.LedDict['P8'].value(False)
+				self.LedDict['P7'].value(False)
+				print('battery_test_sequence END')
+		return enable
+
+	def _set_batt_bars(self, vbatt):
+		if vbatt > self.battBarThresholdFour:
+			self.LedDict['P10'].value(True)
+			self.LedDict['P9'].value(True)
+			self.LedDict['P8'].value(True)
+			self.LedDict['P7'].value(True)
+		elif vbatt > self.battBarThresholdThree:
+			self.LedDict['P10'].value(False)
+			self.LedDict['P9'].value(True)
+			self.LedDict['P8'].value(True)
+			self.LedDict['P7'].value(True)
+		elif vbatt > self.battBarThresholdTwo:
+			self.LedDict['P10'].value(False)
+			self.LedDict['P9'].value(False)
+			self.LedDict['P8'].value(True)
+			self.LedDict['P7'].value(True)
+		elif vbatt > self.battBarThresholdOne:
 			self.LedDict['P10'].value(False)
 			self.LedDict['P9'].value(False)
 			self.LedDict['P8'].value(False)

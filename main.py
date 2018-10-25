@@ -67,6 +67,9 @@ rssiThreadRunning = False
 sendRssiCount = 0
 battery_strength_display = False
 battery_strength_display_count = 0
+signal_strength_thread_flag = False
+signal_strength_display = False
+signal_strength_display_count = 0
 SearchTimeoutDuration = 60
 BatteryTimeoutDuration = 3
 LongPressTimeoutDuration = 2.5
@@ -355,7 +358,7 @@ while 1:
 					print("connect_socket OS error:", err)
 					print('Failed to connect to ' + HOST, ': socketCreatedCount', socketCreatedCount)
 					socketCreatedCount += 1
-					if socketCreatedCount > 200:
+					if socketCreatedCount > 50:
 						socketCreatedCount = 0
 						socketCreatedFlag = False
 						print('Kick New Socket Creation', time.ticks_us()/1000, 'ms:')
@@ -469,7 +472,7 @@ while 1:
 		# Process data
 		if data:
 			for fragment in fragment_list:
-				if not battery_strength_display:
+				if not battery_strength_display and not signal_strength_thread_flag and not signal_strength_display:
 					check_led_data(fragment, LedDict)
 				check_get_rssi_flag(fragment, JsonTreeDict)
 				check_power_down_flag(fragment, JsonTreeDict)
@@ -504,10 +507,35 @@ while 1:
 		if JsonTreeDict['command_flags']['signal_strength_display']:
 			JsonTreeDict['command_flags']['signal_strength_display'] = False
 			print('\nsignal_strength_display activated')
+			signal_strength_thread_flag = True
+			LedDict['P10'].value(True)
+			LedDict['P11'].value(True)
+			rssiThreadRunning = True
+			_thread.start_new_thread(get_rssi_thread, [wlan])
+			print('after thread start', time.ticks_ms(), 'rssi =', rssi)
+
+		if signal_strength_thread_flag and not JsonTreeDict['command_flags']['battery_strength_display'] and not battery_strength_display:
+			if not rssiThreadRunning:
+				signal_strength_thread_flag = False
+				signal_strength_display = True
+				if rssi is not None:
+					led_sequence.signal_test(enable=True, on_off=signal_strength_display, rssi=rssi)
+				print('\nsignal_strength_display start', time.ticks_us() / 1000, 'ms')
+
+		if signal_strength_display and not JsonTreeDict['command_flags']['battery_strength_display'] and not battery_strength_display:
+			if signal_strength_display_count >= 50:  # Measured once to take 2.922s
+				signal_strength_display_count = 0
+				signal_strength_display = False
+				led_sequence.signal_test(enable=True, on_off=signal_strength_display, rssi=rssi)
+				print('\nsignal_strength_display stop', time.ticks_us() / 1000, 'ms')
+			else:
+				signal_strength_display_count += 1
 
 		if JsonTreeDict['command_flags']['battery_strength_display']:
 			JsonTreeDict['command_flags']['battery_strength_display'] = False
 			print('\nbattery_strength_display activated')
+			signal_strength_thread_flag = False
+			signal_strength_display = False
 			battery_strength_display = True
 			led_sequence.battery_test(enable=True, on_off=battery_strength_display)
 			print('\nbattery_strength_display start', time.ticks_us() / 1000, 'ms')
