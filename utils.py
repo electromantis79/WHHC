@@ -43,7 +43,7 @@ def build_rssi_fragment_dict(value):
 	return temp_dict
 
 
-def send_events(sock, message, mode):
+def send_events(sock, message, mode, timePin):
 	if message:
 		# Send some data to remote server
 		# Connect to remote server
@@ -52,6 +52,9 @@ def send_events(sock, message, mode):
 		try:
 			# Send the whole string
 			sock.sendall(json_string)
+			timePin.value(True)
+			time.sleep(0.1)
+			timePin.value(False)
 			print('\nSent', time.ticks_us()/1000, 'ms:', json_string)
 
 		except OSError as err:

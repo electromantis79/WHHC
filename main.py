@@ -50,11 +50,47 @@ def get_rssi_thread(wlan):
 	rssiThreadRunning = False
 
 
+def ptp_thread():
+	global ptp_sock, PtpSocketConnectedFlag
+	while 1:
+		if PtpSocketConnectedFlag and ptp_sock is not None:
+			data = None
+			try:
+				data = ptp_sock.read()
+
+			except OSError as err:
+				# print (err, err.errno)
+
+				if err.errno == 11:
+					# Don't care about error here. It is normal for .recv() if non-blocking to wait for device to be ready
+					print('special 11 spot', err)
+				elif err.errno == 113:
+					print("check_receive OS error:", err)
+				elif err.errno == 104:  # ECONNRESET
+					print("check_receive OS error ECONNRESET:", err)
+				else:
+					print("check_receive OS error GENERIC:", err)
+
+				ptp_sock.close()
+				PtpSocketConnectedFlag = False
+
+			if data is not None:
+				data = decode_bytes_to_string(data)
+
+			if data:
+				print('\nData Received', time.ticks_us() / 1000, 'ms:', data)
+
+			time.sleep_ms(1)
+
+		machine.idle()
+
+
 # Initialize ---------------------------------------------------
 
 # Constants
 HOST = '192.168.8.1'
 PORT = 60032
+PTP_PORT = 60042
 SSID = 'ScoreNet'
 AUTH = (WLAN.WPA2, 'centari008')
 
@@ -65,6 +101,11 @@ rssi = None
 vbatt = None
 rssiThreadRunning = False
 startRssiThreadFlag = True
+startPtpFlag = False
+PtpSocketCreatedFlag = False
+PtpSocketConnectedFlag = False
+PtpSocketCreatedCount = 0
+ptp_sock = None
 battery_strength_display = False
 battery_strength_display_count = 0
 signal_strength_thread_flag = False
@@ -88,6 +129,9 @@ socketCreatedFlag = False
 socketCreatedCount = 0
 mode = 'SearchModes'
 led_sequence = LedSequences(LedDict)
+
+timePin = Pin('P22', mode=Pin.OUT)
+timePin.value(False)
 
 # Turn all off
 led_sequence.all_off()
@@ -207,6 +251,8 @@ else:
 	wlan.ifconfig(config=('192.168.8.145', '255.255.255.0', '192.168.8.1', '8.8.8.8'))
 	print('done.\nConnecting to WiFi network...')
 	wlan.connect(ssid=SSID, auth=AUTH)
+
+_thread.start_new_thread(ptp_thread, [])
 
 search_mode_timer.start()
 led_sequence.timer.start()
@@ -365,6 +411,8 @@ while 1:
 
 			if SocketConnectedFlag:
 				SocketConnectedFlag = False
+				PtpSocketCreatedFlag = False
+				PtpSocketConnectedFlag = False
 
 				mode = 'DiscoveredMode'
 				long_press_timer.stop()
@@ -459,20 +507,19 @@ while 1:
 			connected_mode_power_down_timer.start()
 			darkFlag = False
 			json_tree_fragment_dict = build_json_tree_fragment_dict(JsonTreeDict)
-			sock, mode = send_events(sock, json_tree_fragment_dict, mode)
+			sock, mode = send_events(sock, json_tree_fragment_dict, mode, timePin)
 
 		# Check for data
 		sock, data, mode, socketCreatedFlag = check_receive(sock, mode, socketCreatedFlag)
 
-		# Format data
 		if data:
+			# Format data
 			index_list = find_substrings(data, 'JSON_FRAGMENT')
 			fragment_list = slice_fragments(data, index_list)
 			for fragment_index, fragment in enumerate(fragment_list):
 				fragment_list[fragment_index] = convert_to_json_format(fragment)
 
-		# Process data
-		if data:
+			# Process data
 			for fragment in fragment_list:
 				if not battery_strength_display and not signal_strength_thread_flag and not signal_strength_display:
 					check_led_data(fragment, LedDict)
@@ -553,6 +600,35 @@ while 1:
 				print('\nbattery_strength_display stop', time.ticks_us() / 1000, 'ms')
 			else:
 				battery_strength_display_count += 1
+
+		# React to Connected
+		if not PtpSocketConnectedFlag:
+			# Create and connect a socket
+			if not PtpSocketCreatedFlag:
+				try:
+					# Create an AF_INET, STREAM socket (TCP)
+					ptp_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+					print('PTP Socket Created', time.ticks_us() / 1000, 'ms')
+					PtpSocketCreatedFlag = True
+
+				except OSError as err:
+					print("create_socket OS error:", err)
+					print('Failed to create socket.')
+			else:
+				try:
+					ptp_sock.connect((HOST, PTP_PORT))
+					ptp_sock.setblocking(0)
+					print('PTP Socket Connected to ' + HOST + ' on port ' + str(PTP_PORT))
+					PtpSocketConnectedFlag = True
+
+				except OSError as err:
+					print("connect_socket OS error:", err)
+					print('Failed to connect to ' + HOST, ': PtpSocketCreatedCount', PtpSocketCreatedCount)
+					PtpSocketCreatedCount += 1
+					if PtpSocketCreatedCount > 50:
+						PtpSocketCreatedCount = 0
+						PtpSocketCreatedFlag = False
+						print('Kick New PTP Socket Creation', time.ticks_us() / 1000, 'ms')
 
 		# Check connection to wifi and reconnect
 		if not wlan.isconnected() and not JsonTreeDict['command_flags']['power_down']:
