@@ -51,12 +51,26 @@ def get_rssi_thread(wlan):
 
 
 def ptp_thread():
-	global ptp_sock, PtpSocketConnectedFlag
+	global ptp_sock, PtpSocketConnectedFlag, timePin, offset
+	sync_string = 'SYNC'
+	follow_up_string = 'FOLLOW_UP'
+	delay_request_string = 'DELAY_REQUEST'
+	delay_response_string = 'DELAY_RESPONSE'
+	sync_flag = False
+	follow_up_flag = False
+	delay_response_flag = False
+	time_1 = None
+	time_2 = None
+	time_3 = None
+	time_4 = None
+	offsetList = []
+	offsetCount = 0
 	while 1:
 		if PtpSocketConnectedFlag and ptp_sock is not None:
 			data = None
 			try:
 				data = ptp_sock.read()
+				read_time = time.ticks_us()
 
 			except OSError as err:
 				# print (err, err.errno)
@@ -78,7 +92,84 @@ def ptp_thread():
 				data = decode_bytes_to_string(data)
 
 			if data:
-				print('\nData Received', time.ticks_us() / 1000, 'ms:', data)
+				print('\nData Received', read_time, 'us:', data)
+
+				if data[:len(sync_string)] == sync_string:
+					valid, time_stamp = validate_ptp_string(data, sync_string)
+					if valid:
+						sync_flag = True
+						time_2 = read_time
+						timePin.value(True)  # This is redundant in next function but is here for faster toggle
+						toggle_pin_ms(timePin, repeat_quantity=2)
+						print('time_2=', time_2)
+
+						estimated_time = time_stamp
+						print('estimated_time', estimated_time)
+					else:
+						sync_flag = False
+						follow_up_flag = False
+						delay_response_flag = False
+
+				elif data[:len(follow_up_string)] == follow_up_string:
+					valid, time_stamp = validate_ptp_string(data, follow_up_string)
+					if valid:
+						follow_up_flag = True
+						time_1 = time_stamp
+						guess = time.ticks_us() - offset
+						# print('time_1=', time_1, 'guess', guess, 'diff guess', guess - time_1)
+
+						try:
+							# Send the whole string
+							ptp_sock.sendall(delay_request_string + ' ' + str(guess + 7000))
+							time_3 = time.ticks_us()
+
+							timePin.value(True)  # This is redundant in next function but is here for faster toggle
+							toggle_pin_ms(timePin, repeat_quantity=3)
+							print('time_3=', time_3)
+
+							print('\nSent', time_3, 'us:', delay_request_string)
+
+						except OSError as err:
+							if err.errno == 104:  # ECONNRESET
+								print("send_button_events OS error ECONNRESET:", err)
+							else:
+								print("send_button_events OS error:", err)
+					else:
+						sync_flag = False
+						follow_up_flag = False
+						delay_response_flag = False
+
+				elif data[:len(delay_response_string)] == delay_response_string:
+					valid, time_stamp = validate_ptp_string(data, delay_response_string)
+					if valid:
+						delay_response_flag = True
+						time_4 = time_stamp
+						print('time_4=', time_4)
+
+					else:
+						sync_flag = False
+						follow_up_flag = False
+						delay_response_flag = False
+
+				if (
+						sync_flag and follow_up_flag and delay_response_flag and
+						time_1 is not None and time_2 is not None and time_3 is not None and time_4 is not None
+				):
+					offset_temp, one_way_delay = calculate_time_values(time_1, time_2, time_3, time_4)
+					if one_way_delay > 3000:
+						offsetList.append(offsetCount)
+						offsetCount = 0
+						print('Skipped offset change!!!!')
+					else:
+						offsetCount += 1
+						offset = offset_temp
+						print(offsetList)
+
+					master_clock_time = time.ticks_us() - offset
+					print('master_clock_time', int(master_clock_time))
+					sync_flag = False
+					follow_up_flag = False
+					delay_response_flag = False
 
 			time.sleep_ms(1)
 
@@ -127,6 +218,7 @@ TransferFilesCompleteFlag = False
 SocketConnectedFlag = False
 socketCreatedFlag = False
 socketCreatedCount = 0
+offset = 0
 mode = 'SearchModes'
 led_sequence = LedSequences(LedDict)
 
