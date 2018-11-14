@@ -65,6 +65,8 @@ def ptp_thread():
 	time_4 = None
 	offsetList = []
 	offsetCount = 0
+	check_socket_count = 0
+	print_ptp_messages = False
 	while 1:
 		if PtpSocketConnectedFlag and ptp_sock is not None:
 			data = None
@@ -92,26 +94,30 @@ def ptp_thread():
 				data = decode_bytes_to_string(data)
 
 			if data:
-				print('\nData Received', read_time, 'us:', data)
+				if print_ptp_messages:
+					print('\nData Received', read_time, 'us:', data)
+				check_socket_count = 0
 
 				if data[:len(sync_string)] == sync_string:
-					valid, time_stamp = validate_ptp_string(data, sync_string)
+					valid, time_stamp = validate_ptp_string(data, sync_string, print_messages=print_ptp_messages)
 					if valid:
 						sync_flag = True
 						time_2 = read_time
 						timePin.value(True)  # This is redundant in next function but is here for faster toggle
 						toggle_pin_ms(timePin, repeat_quantity=2)
-						print('time_2=', time_2)
+						if print_ptp_messages:
+							print('time_2=', time_2)
 
 						estimated_time = time_stamp
-						print('estimated_time', estimated_time)
+						if print_ptp_messages:
+							print('estimated_time', estimated_time)
 					else:
 						sync_flag = False
 						follow_up_flag = False
 						delay_response_flag = False
 
 				elif data[:len(follow_up_string)] == follow_up_string:
-					valid, time_stamp = validate_ptp_string(data, follow_up_string)
+					valid, time_stamp = validate_ptp_string(data, follow_up_string, print_messages=print_ptp_messages)
 					if valid:
 						follow_up_flag = True
 						time_1 = time_stamp
@@ -125,9 +131,11 @@ def ptp_thread():
 
 							timePin.value(True)  # This is redundant in next function but is here for faster toggle
 							toggle_pin_ms(timePin, repeat_quantity=3)
-							print('time_3=', time_3)
+							if print_ptp_messages:
+								print('time_3=', time_3)
 
-							print('\nSent', time_3, 'us:', delay_request_string)
+							if print_ptp_messages:
+								print('\nSent', time_3, 'us:', delay_request_string)
 
 						except OSError as err:
 							if err.errno == 104:  # ECONNRESET
@@ -140,11 +148,12 @@ def ptp_thread():
 						delay_response_flag = False
 
 				elif data[:len(delay_response_string)] == delay_response_string:
-					valid, time_stamp = validate_ptp_string(data, delay_response_string)
+					valid, time_stamp = validate_ptp_string(data, delay_response_string, print_messages=print_ptp_messages)
 					if valid:
 						delay_response_flag = True
 						time_4 = time_stamp
-						print('time_4=', time_4)
+						if print_ptp_messages:
+							print('time_4=', time_4)
 
 					else:
 						sync_flag = False
@@ -155,21 +164,42 @@ def ptp_thread():
 						sync_flag and follow_up_flag and delay_response_flag and
 						time_1 is not None and time_2 is not None and time_3 is not None and time_4 is not None
 				):
-					offset_temp, one_way_delay = calculate_time_values(time_1, time_2, time_3, time_4)
+					offset_temp, one_way_delay = calculate_time_values(time_1, time_2, time_3, time_4, print_messages=print_ptp_messages)
 					if one_way_delay > 3000:
 						offsetList.append(offsetCount)
 						offsetCount = 0
-						print('Skipped offset change!!!!')
+						if print_ptp_messages:
+							print('Skipped offset change!!!!')
 					else:
 						offsetCount += 1
 						offset = offset_temp
-						print(offsetList)
+						if print_ptp_messages:
+							print(offsetList)
 
 					master_clock_time = time.ticks_us() - offset
-					print('master_clock_time', int(master_clock_time))
+					if print_ptp_messages:
+						print('master_clock_time', int(master_clock_time))
 					sync_flag = False
 					follow_up_flag = False
 					delay_response_flag = False
+
+			if check_socket_count > 1100:
+				check_socket_count = 0
+				try:
+					# Send the whole string
+					ptp_sock.sendall('CHECK_CONNECTED')
+					print('\nSent', time.ticks_us() / 1000, 'ms:', 'CHECK_CONNECTED')
+
+				except OSError as err:
+					if err.errno == 104:  # ECONNRESET
+						print("send_button_events OS error ECONNRESET:", err)
+					else:
+						print("send_button_events OS error:", err)
+
+					ptp_sock.close()
+					PtpSocketConnectedFlag = False
+			else:
+				check_socket_count += 1
 
 			time.sleep_ms(1)
 
@@ -581,6 +611,7 @@ while 1:
 			connected_mode_power_down_timer.reset()
 			# ENTER Sleep Mode
 			print('ENTER deep sleep\n')
+			ptp_sock.close()
 			machine.deepsleep()
 		elif (
 				connected_mode_power_down_timer.read() > ConnectedDarkTimeoutDuration
@@ -738,6 +769,7 @@ while 1:
 
 	elif mode == 'SleepMode':
 		print('ENTER deep sleep\n')
+		ptp_sock.close()
 		machine.deepsleep()
 	else:
 		print('ERROR - no mode selected area should never be entered')

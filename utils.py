@@ -266,10 +266,11 @@ def get_battery_voltage(show=0):
 	return vbatt
 
 
-def validate_ptp_string(data, header_string):
+def validate_ptp_string(data, header_string, print_messages):
 	header_length = len(header_string)
 	time_stamp = 0
-	print('data:', data, 'header_string', header_string)
+	if print_messages:
+		print('data:', data, 'header_string', header_string)
 	data = data[header_length:]
 	try:
 		time_stamp = int(data)
@@ -288,13 +289,15 @@ def toggle_pin_ms(time_pin, duration=1, repeat_quantity=1):
 		time.sleep_ms(duration)
 
 
-def calculate_time_values(time_1, time_2, time_3, time_4):
-	print('time_1', time_1, 'time_2', time_2, 'time_3', time_3, 'time_4', time_4)
+def calculate_time_values(time_1, time_2, time_3, time_4, print_messages=False):
+	if print_messages:
+		print('time_1', time_1, 'time_2', time_2, 'time_3', time_3, 'time_4', time_4)
 	MS_diff = time_2 - time_1
 	SM_diff = time_4 - time_3
 	offset = int((MS_diff - SM_diff) / 2)
 	one_way_delay = int((MS_diff + SM_diff) / 2)
-	print('MS_diff', MS_diff, 'SM_diff', SM_diff, 'offset', offset, 'one_way_delay', one_way_delay)
+	if print_messages:
+		print('MS_diff', MS_diff, 'SM_diff', SM_diff, 'offset', offset, 'one_way_delay', one_way_delay)
 	return offset, one_way_delay
 
 
