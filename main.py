@@ -621,7 +621,7 @@ while 1:
 			darkFlag = True
 
 		# Handle button events
-		JsonTreeDict, event_flag = handle_button_event(JsonTreeDict, ButtEventDict)
+		JsonTreeDict, event_flag = handle_button_event(JsonTreeDict, ButtEventDict, offset)
 
 		# Send button events to server
 		if event_flag:

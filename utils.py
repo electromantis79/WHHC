@@ -5,7 +5,7 @@ import time
 import json
 
 
-def handle_button_event(json_tree, butt_event_dict):
+def handle_button_event(json_tree, butt_event_dict, offset):
 	event_flag = 0
 	for button in butt_event_dict:
 		if butt_event_dict[button]:
@@ -13,11 +13,13 @@ def handle_button_event(json_tree, butt_event_dict):
 				butt_event_dict[button] = 2
 				json_tree['button_objects'][button]['event_flag'] = True
 				json_tree['button_objects'][button]['event_state'] = 'down'
+				json_tree['button_objects'][button]['event_time'] = time.ticks_us() - offset
 				event_flag = 1
 			elif butt_event_dict[button] == 3:
 				butt_event_dict[button] = 0
 				json_tree['button_objects'][button]['event_flag'] = True
 				json_tree['button_objects'][button]['event_state'] = 'up'
+				json_tree['button_objects'][button]['event_time'] = time.ticks_us() - offset
 				event_flag = 1
 
 	return json_tree, event_flag
@@ -31,6 +33,7 @@ def build_json_tree_fragment_dict(json_tree):
 			temp_dict['button_objects'][button] = dict()
 			temp_dict['button_objects'][button]['event_flag'] = json_tree['button_objects'][button]['event_flag']
 			temp_dict['button_objects'][button]['event_state'] = json_tree['button_objects'][button]['event_state']
+			temp_dict['button_objects'][button]['event_time'] = json_tree['button_objects'][button]['event_time']
 			temp_dict['button_objects'][button]['keymap_grid_value'] = json_tree['button_objects'][button]['keymap_grid_value']
 			json_tree['button_objects'][button]['event_flag'] = False
 
@@ -332,7 +335,7 @@ def build_json_tree(
 		json_tree['button_objects'][button]['keypad_key_number'] = button_info_dict[button]['keypad_key_number']
 		json_tree['button_objects'][button]['keymap_grid_value'] = button_info_dict[button]['keymap_grid_value']
 		json_tree['button_objects'][button]['event_flag'] = False
-		json_tree['button_objects'][button]['event_time'] = 0.0
+		json_tree['button_objects'][button]['event_time'] = 0
 		json_tree['button_objects'][button]['event_state'] = 'up'
 
 	json_tree['command_flags'] = dict()
