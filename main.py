@@ -50,6 +50,14 @@ def get_rssi_thread(wlan):
 	rssiThreadRunning = False
 
 
+def send_blocks_thread():
+	global sendBlocksFlag
+	while sendBlocksFlag:
+		machine.idle()
+
+	print('send_blocks_thread END')
+
+
 def ptp_thread():
 	global ptp_sock, PtpSocketConnectedFlag, timePin, offset
 	sync_string = 'SYNC'
@@ -188,7 +196,8 @@ def ptp_thread():
 				try:
 					# Send the whole string
 					ptp_sock.sendall('CHECK_CONNECTED')
-					print('\nSent', time.ticks_us() / 1000, 'ms:', 'CHECK_CONNECTED')
+					if print_ptp_messages:
+						print('\nSent', time.ticks_us() / 1000, 'ms:', 'CHECK_CONNECTED')
 
 				except OSError as err:
 					if err.errno == 104:  # ECONNRESET
@@ -221,6 +230,9 @@ message = None
 rssi = None
 vbatt = None
 rssiThreadRunning = False
+sendBlocksFlag = False
+startRssiForSendBlocksThreadFlag = True
+rssiSentForSendBlocks = False
 startRssiThreadFlag = True
 startPtpFlag = False
 PtpSocketCreatedFlag = False
@@ -630,7 +642,7 @@ while 1:
 			connected_mode_power_down_timer.start()
 			darkFlag = False
 			json_tree_fragment_dict = build_json_tree_fragment_dict(JsonTreeDict)
-			sock, mode = send_events(sock, json_tree_fragment_dict, mode, timePin)
+			sock, mode = send_events(sock, json_tree_fragment_dict, mode)
 
 		# Check for data
 		sock, data, mode, socketCreatedFlag = check_receive(sock, mode, socketCreatedFlag)
@@ -647,6 +659,7 @@ while 1:
 				if not battery_strength_display and not signal_strength_thread_flag and not signal_strength_display:
 					check_led_data(fragment, LedDict)
 				check_get_rssi_flag(fragment, JsonTreeDict)
+				check_send_blocks_flag(fragment, JsonTreeDict)
 				check_power_down_flag(fragment, JsonTreeDict)
 				check_signal_strength_display_flag(fragment, JsonTreeDict)
 				check_battery_strength_display_flag(fragment, JsonTreeDict)
@@ -664,6 +677,29 @@ while 1:
 				sock, mode = send_events(sock, json_tree_fragment_dict, mode)
 				print('rssi sent', time.ticks_ms())
 				startRssiThreadFlag = True
+
+		# React to send_blocks
+		send_blocks = JsonTreeDict['command_flags']['send_blocks']
+		if send_blocks:
+			if startRssiForSendBlocksThreadFlag:
+				startRssiForSendBlocksThreadFlag = False
+				rssiThreadRunning = True
+				sendBlocksFlag = True
+				_thread.start_new_thread(get_rssi_thread, [wlan])
+				print('after thread start', time.ticks_ms(), 'rssi =', rssi)
+
+			if not rssiThreadRunning and rssi is not None and not rssiSentForSendBlocks:
+				rssiSentForSendBlocks = True
+				json_tree_fragment_dict = build_rssi_fragment_dict(rssi)
+				sock, mode = send_events(sock, json_tree_fragment_dict, mode)
+				print('rssi sent', time.ticks_ms())
+				print('Start send_blocks')
+				_thread.start_new_thread(send_blocks_thread, [])
+				print('after thread start', time.ticks_ms())
+		else:
+			startRssiForSendBlocksThreadFlag = True
+			rssiSentForSendBlocks = False
+			sendBlocksFlag = False
 
 		# React to power_down event
 		if JsonTreeDict['command_flags']['power_down']:

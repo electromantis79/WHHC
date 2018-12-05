@@ -46,7 +46,7 @@ def build_rssi_fragment_dict(value):
 	return temp_dict
 
 
-def send_events(sock, message, mode, timePin):
+def send_events(sock, message, mode):
 	if message:
 		# Send some data to remote server
 		# Connect to remote server
@@ -182,6 +182,19 @@ def check_get_rssi_flag(json_tree_fragment_dict, json_tree, show=False):
 			else:
 				if show:
 					print('\nget_rssi not in command_flags')
+		else:
+			if show:
+				print('\ncommand_flags not in fragment')
+
+
+def check_send_blocks_flag(json_tree_fragment_dict, json_tree, show=False):
+	if json_tree_fragment_dict is not None:
+		if 'command_flags' in json_tree_fragment_dict:
+			if 'send_blocks' in json_tree_fragment_dict['command_flags']:
+				json_tree['command_flags']['send_blocks'] = json_tree_fragment_dict['command_flags']['send_blocks']
+			else:
+				if show:
+					print('\nsend_blocks not in command_flags')
 		else:
 			if show:
 				print('\ncommand_flags not in fragment')
@@ -340,6 +353,7 @@ def build_json_tree(
 
 	json_tree['command_flags'] = dict()
 	json_tree['command_flags']['get_rssi'] = False
+	json_tree['command_flags']['send_blocks'] = False
 	json_tree['command_flags']['power_down'] = False
 	json_tree['command_flags']['signal_strength_display'] = False
 	json_tree['command_flags']['battery_strength_display'] = False
