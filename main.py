@@ -51,8 +51,25 @@ def get_rssi_thread(wlan):
 
 
 def send_blocks_thread():
-	global sendBlocksFlag
+	global sendBlocksFlag, sock, mode, block_data
+	block_data = 'dfgdfg45345dfgdfgd4sdg8sdgj348u'
+	Steps = 3
+	Transmits = 3
+	steps = Steps
+	transmits = Transmits
 	while sendBlocksFlag:
+		while steps and sendBlocksFlag:
+			while transmits and sendBlocksFlag:
+				stamp = str(get_ticks_us(offset))
+				message = block_data + '@' + str(steps) + '@' + stamp + '@' + str(transmits)
+				send_events(sock, message, mode)
+				time.sleep_ms(100)
+				transmits -= 1
+			block_data = block_data + block_data
+			transmits = Transmits
+			steps -= 1
+			time.sleep_ms(2000)
+
 		machine.idle()
 
 	print('send_blocks_thread END')
@@ -239,6 +256,7 @@ PtpSocketCreatedFlag = False
 PtpSocketConnectedFlag = False
 PtpSocketCreatedCount = 0
 ptp_sock = None
+block_data = ''
 battery_strength_display = False
 battery_strength_display_count = 0
 signal_strength_thread_flag = False
