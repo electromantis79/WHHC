@@ -143,7 +143,7 @@ def slice_fragments(data, index_list):
 	for fragment_index, fragment in enumerate(fragment_list):
 		fragment_list[fragment_index] = fragment[len('JSON_FRAGMENT'):]
 
-	print('fragment_list', fragment_list)
+	# print('fragment_list', fragment_list)
 	return fragment_list
 
 

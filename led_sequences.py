@@ -253,9 +253,9 @@ class LedSequences(object):
 				self.LedDict['P11'].value(True)
 				print('[Battery  Strength] = OFF')
 				self.LedDict['P6'].value(False)
-				print('[Bar 1], [Bar 2], [Bar 3], [Bar 4] show battery strength -', rssi, 'dB')
+				print('[Bar 1], [Bar 2], [Bar 3], [Bar 4] show signal strength -', rssi, 'dB')
 				self._set_signal_bars(rssi)
-				print('battery_test_sequence END')
+				print('signal_test_sequence END')
 			else:
 				print('[Signal Strength] = OFF')
 				self.LedDict['P11'].value(False)
@@ -266,7 +266,7 @@ class LedSequences(object):
 				self.LedDict['P9'].value(False)
 				self.LedDict['P8'].value(False)
 				self.LedDict['P7'].value(False)
-				print('battery_test_sequence END')
+				print('signal_test_sequence END')
 		return enable
 
 	def _set_signal_bars(self, rssi):

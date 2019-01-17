@@ -22,16 +22,12 @@ def button_event(pin):  # Pin Callback
 	global ButtEventDict
 	if pin.id() in ButtEventDict:
 		last_state = ButtEventDict[pin.id()]
-		# Down press = 1, Up press = 2
-		# print('---------------------------', pin.id(), pin())
-		# print('ButtEventDict[pin.id()]', last_state)
+		# Down press = 0, Up press = 2
 		if last_state == 0 and pin() == 0:
 			last_state = 1
 		elif last_state == 2 and pin() == 1:
 			last_state = 3
-
 		ButtEventDict[pin.id()] = last_state
-		# print('ButtEventDict[pin.id()]', last_state)
 
 
 def get_rssi_thread(wlan):
@@ -53,8 +49,8 @@ def get_rssi_thread(wlan):
 def send_blocks_thread():
 	global sendBlocksFlag, sock, mode, block_data
 	block_data = 'dfgdfg45345dfgdfgd4sdg8sdgj348u'
-	Steps = 3
-	Transmits = 3
+	Steps = 4
+	Transmits = 4
 	steps = Steps
 	transmits = Transmits
 	while sendBlocksFlag:
@@ -65,12 +61,16 @@ def send_blocks_thread():
 				send_events(sock, message, mode)
 				time.sleep_ms(100)
 				transmits -= 1
+				machine.idle()
+
 			block_data = block_data + block_data
 			transmits = Transmits
 			steps -= 1
 			time.sleep_ms(2000)
+			machine.idle()
 
 		machine.idle()
+		sendBlocksFlag = False
 
 	print('send_blocks_thread END')
 
@@ -645,7 +645,8 @@ while 1:
 			machine.deepsleep()
 		elif (
 				connected_mode_power_down_timer.read() > ConnectedDarkTimeoutDuration
-				and not darkFlag and not JsonTreeDict['command_flags']['get_rssi']):
+				and not darkFlag and not JsonTreeDict['command_flags']['get_rssi']
+				and not JsonTreeDict['command_flags']['send_blocks']):
 			print('\nconnected_mode_dark_timer triggered at ', connected_mode_power_down_timer.read(), 's.')
 			led_sequence.all_off()
 			darkFlag = True
@@ -714,6 +715,14 @@ while 1:
 				print('Start send_blocks')
 				_thread.start_new_thread(send_blocks_thread, [])
 				print('after thread start', time.ticks_ms())
+
+			if not startRssiForSendBlocksThreadFlag and rssiSentForSendBlocks and not sendBlocksFlag:
+				JsonTreeDict['command_flags']['send_blocks'] = False
+				print('Test 2 Done in main loop')
+				ButtEventDict['P23'] = 3  # Pretend mode was pressed up to trigger close on RD
+				connected_mode_power_down_timer.stop()
+				connected_mode_power_down_timer.reset()
+				connected_mode_power_down_timer.start()
 		else:
 			startRssiForSendBlocksThreadFlag = True
 			rssiSentForSendBlocks = False
