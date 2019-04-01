@@ -4,6 +4,7 @@ import machine
 import sys
 import time
 import pycom
+import micropython
 import json
 import _thread
 
@@ -18,36 +19,57 @@ print('\nTop of main.py after imports', time.ticks_us() / 1000, 'ms')
 # Functions using global must be in the main.py file for some reason
 
 
-def button_event(pin):  # Pin Callback
-	global ButtEventDict
-	if pin.id() in ButtEventDict:
-		last_state = ButtEventDict[pin.id()]
-		# Down press = 0, Up press = 2
-		if last_state == 0 and pin() == 0:
-			last_state = 1
-		elif last_state == 2 and pin() == 1:
-			last_state = 3
-		ButtEventDict[pin.id()] = last_state
+def handle_button_event_thread():
+	global ButtEventDict, mode, JsonTreeDict, offset, darkFlag, sock,\
+		printFlag, buttonThreadFrequency, need_acknowledgement_flag, block_presses_flag
+	nothing_pressed = True
+	while 1:
+		machine.idle()
+		time.sleep_ms(buttonThreadFrequency)
+		if mode == 'ConnectedMode':
+
+			# Handle button events
+			tic = time.ticks_us() / 1000
+			# print('--Event START', tic, 'ms')
+
+			if not block_presses_flag:
+				JsonTreeDict, event_flag = handle_button_event(JsonTreeDict, ButtEventDict, offset)
+
+				# Send button events to server
+				if event_flag:
+					toc = time.ticks_us() / 1000
+					if printFlag:
+						print('Event FLAG', toc, 'ms')
+					# connected_mode_power_down_timer.stop()
+					# connected_mode_power_down_timer.reset()
+					# connected_mode_power_down_timer.start()
+					# darkFlag = False
+					json_tree_fragment_dict = build_json_tree_fragment_dict(JsonTreeDict)
+					need_acknowledgement_flag, sock, mode = send_events(sock, json_tree_fragment_dict, mode, print_flag=printFlag)
+					toc2 = time.ticks_us() / 1000
+					if printFlag:
+						print('--Event END', toc2, 'ms,', 'Dif check tree', toc-tic, 'ms,', 'Dif full send', toc2-tic, 'ms\n')
 
 
 def get_rssi_thread(wlan):
 	global rssi, rssiThreadRunning
 	before = time.ticks_ms()
+	time.sleep_ms(200)  # Gives time for received packets to be parsed between threads
 
 	nets = wlan.scan()
 	for net in nets:
 		if net.ssid == 'ScoreNet':
 			rssi = net.rssi
-			print('RSSI =', rssi)
+			print('Scorenet found with RSSI =', rssi)
 			rssi = str(rssi)[1:]
 			rssi = int(rssi)
 	after = time.ticks_ms()
-	print('Send RSSI', str(rssi), '- took', str((after - before) / 1000), 'seconds')
+	print('rssi thread took', str((after - before) / 1000), 'seconds')
 	rssiThreadRunning = False
 
 
 def send_blocks_thread():
-	global sendBlocksFlag, sock, mode, block_data
+	global sendBlocksFlag, sock, mode, block_data, need_acknowledgement_flag
 	block_data = 'dfgdfg45345dfgdfgd4sdg8sdgj348u'
 	Steps = 4
 	Transmits = 4
@@ -58,7 +80,7 @@ def send_blocks_thread():
 			while transmits and sendBlocksFlag:
 				stamp = str(get_ticks_us(offset))
 				message = block_data + '@' + str(steps) + '@' + stamp + '@' + str(transmits)
-				send_events(sock, message, mode)
+				need_acknowledgement_flag, sock, mode = send_events(sock, message, mode)
 				time.sleep_ms(100)
 				transmits -= 1
 				machine.idle()
@@ -76,7 +98,8 @@ def send_blocks_thread():
 
 
 def ptp_thread():
-	global ptp_sock, PtpSocketConnectedFlag, timePin, offset
+	global ptp_sock, PtpSocketConnectedFlag, timePin, offset, ptp_thread_flag
+	ptp_thread_flag = True
 	sync_string = 'SYNC'
 	follow_up_string = 'FOLLOW_UP'
 	delay_request_string = 'DELAY_REQUEST'
@@ -248,10 +271,15 @@ rssi = None
 vbatt = None
 rssiThreadRunning = False
 sendBlocksFlag = False
+need_acknowledgement_flag = False
+block_presses_flag = False
+led_dict_values = []
+acknowledgement_count = 0
 startRssiForSendBlocksThreadFlag = True
 rssiSentForSendBlocks = False
 startRssiThreadFlag = True
 startPtpFlag = False
+ptp_thread_flag = False
 PtpSocketCreatedFlag = False
 PtpSocketConnectedFlag = False
 PtpSocketCreatedCount = 0
@@ -268,6 +296,7 @@ LongPressTimeoutDuration = 2.5
 ConnectedDarkTimeoutDuration = 10
 ConnectedPowerDownTimeoutDuration = 760
 MainLoopFrequencyMs = 50
+buttonThreadFrequency = 5
 darkFlag = False
 PowerOffSequenceFlag = True
 PowerOnSequenceFlag = True
@@ -281,6 +310,7 @@ socketCreatedCount = 0
 offset = 0
 mode = 'SearchModes'
 led_sequence = LedSequences(LedDict)
+printFlag = True
 
 timePin = Pin('P22', mode=Pin.OUT)
 timePin.value(False)
@@ -403,8 +433,12 @@ else:
 	wlan.ifconfig(config=('192.168.8.145', '255.255.255.0', '192.168.8.1', '8.8.8.8'))
 	print('done.\nConnecting to WiFi network...')
 	wlan.connect(ssid=SSID, auth=AUTH)
+	Pin('P12', mode=Pin.OUT)(True)
+	wlan.antenna(WLAN.EXT_ANT)
 
 _thread.start_new_thread(ptp_thread, [])
+_thread.start_new_thread(handle_button_event_thread, [])
+
 
 search_mode_timer.start()
 led_sequence.timer.start()
@@ -633,6 +667,8 @@ while 1:
 
 	elif mode == 'ConnectedMode':
 		# print('\nConnectedMode')
+		# print('\nnConnectedMode start', time.ticks_us() / 1000, 'ms:')
+		'''
 
 		# Search Mode Timer Check
 		if connected_mode_power_down_timer.read() > ConnectedPowerDownTimeoutDuration:
@@ -662,13 +698,25 @@ while 1:
 			darkFlag = False
 			json_tree_fragment_dict = build_json_tree_fragment_dict(JsonTreeDict)
 			sock, mode = send_events(sock, json_tree_fragment_dict, mode)
+		'''
 
 		# Check for data
-		sock, data, mode, socketCreatedFlag = check_receive(sock, mode, socketCreatedFlag)
+		sock, data, mode, socketCreatedFlag = check_receive(sock, mode, socketCreatedFlag, print_flag=printFlag)
 
 		if data:
 			# Format data
-			index_list = find_substrings(data, 'JSON_FRAGMENT')
+			tic = time.ticks_us() / 1000
+			if printFlag:
+				print('Data START', tic, 'ms')
+
+			if block_presses_flag:
+				block_presses_flag = False
+				led_sequence.set_led_dict_values(led_dict_values)
+
+			need_acknowledgement_flag = False
+			acknowledgement_count = 0
+
+			index_list = find_substrings(data, 'JSON_FRAGMENT', print_flag=printFlag)
 			fragment_list = slice_fragments(data, index_list)
 			for fragment_index, fragment in enumerate(fragment_list):
 				fragment_list[fragment_index] = convert_to_json_format(fragment)
@@ -676,25 +724,39 @@ while 1:
 			# Process data
 			for fragment in fragment_list:
 				if not battery_strength_display and not signal_strength_thread_flag and not signal_strength_display:
-					check_led_data(fragment, LedDict)
-				check_get_rssi_flag(fragment, JsonTreeDict)
-				check_send_blocks_flag(fragment, JsonTreeDict)
-				check_power_down_flag(fragment, JsonTreeDict)
-				check_signal_strength_display_flag(fragment, JsonTreeDict)
-				check_battery_strength_display_flag(fragment, JsonTreeDict)
+					check_led_data(fragment, LedDict, print_flag=False)
+				check_get_rssi_flag(fragment, JsonTreeDict, print_flag=False)
+				check_send_blocks_flag(fragment, JsonTreeDict, print_flag=False)
+				check_power_down_flag(fragment, JsonTreeDict, print_flag=False)
+				check_signal_strength_display_flag(fragment, JsonTreeDict, print_flag=False)
+				check_battery_strength_display_flag(fragment, JsonTreeDict, print_flag=False)
+			toc = time.ticks_us() / 1000
+			if printFlag:
+				print('\nData Processed', toc, 'ms, Dif Proc', toc - tic, 'ms')
+		else:
+			if need_acknowledgement_flag:
+				if acknowledgement_count >= 3 and not block_presses_flag:
+					acknowledgement_count = 0
+					need_acknowledgement_flag = False
+					block_presses_flag = True
+					print('\nNo ACK received', time.ticks_us() / 1000, 'ms')
+					led_dict_values = led_sequence.get_led_dict_values()
+					led_sequence.all_on()
+				else:
+					acknowledgement_count += 1
 
 		# React to get_rssi
-		if JsonTreeDict['command_flags']['get_rssi']:
+		if JsonTreeDict['command_flags']['get_rssi'] and not block_presses_flag:
 			if startRssiThreadFlag:
 				startRssiThreadFlag = False
 				rssiThreadRunning = True
 				_thread.start_new_thread(get_rssi_thread, [wlan])
-				print('after thread start', time.ticks_ms(), 'rssi =', rssi)
+				print('after thread start', time.ticks_us() / 1000, 'ms: rssi =', rssi)
 
 			if not rssiThreadRunning and rssi is not None:
 				json_tree_fragment_dict = build_rssi_fragment_dict(rssi)
-				sock, mode = send_events(sock, json_tree_fragment_dict, mode)
-				print('rssi sent', time.ticks_ms())
+				need_acknowledgement_flag, sock, mode = send_events(sock, json_tree_fragment_dict, mode)
+				print('rssi sent', time.ticks_us() / 1000, 'ms')
 				startRssiThreadFlag = True
 
 		# React to send_blocks
@@ -710,7 +772,7 @@ while 1:
 			if not rssiThreadRunning and rssi is not None and not rssiSentForSendBlocks:
 				rssiSentForSendBlocks = True
 				json_tree_fragment_dict = build_rssi_fragment_dict(rssi)
-				sock, mode = send_events(sock, json_tree_fragment_dict, mode)
+				need_acknowledgement_flag, sock, mode = send_events(sock, json_tree_fragment_dict, mode)
 				print('rssi sent', time.ticks_ms())
 				print('Start send_blocks')
 				_thread.start_new_thread(send_blocks_thread, [])
@@ -788,7 +850,7 @@ while 1:
 				battery_strength_display_count += 1
 
 		# React to Connected
-		if not PtpSocketConnectedFlag:
+		if ptp_thread_flag and not PtpSocketConnectedFlag:
 			# Create and connect a socket
 			if not PtpSocketCreatedFlag:
 				try:
@@ -819,8 +881,24 @@ while 1:
 		# Check connection to wifi and reconnect
 		if not wlan.isconnected() and not JsonTreeDict['command_flags']['power_down']:
 			mode = 'SearchModes'
+			print('!!!!!!!!!!not wlan.isconnected()!!!!!!!!!!!')
+
+			long_press_timer.stop()
+			long_press_timer.reset()
+			search_mode_timer.stop()
+			search_mode_timer.reset()
+			battery_mode_timer.stop()
+			battery_mode_timer.reset()
+			led_sequence.timer.stop()
+			led_sequence.timer.reset()
+
+			search_mode_timer.start()
+			led_sequence.timer.start()
+
 			print('\n======== END Connected Modes ========\n')
 			print('\n======== BEGIN Search Modes ========\n')
+
+		# print('\nConnectedMode END', time.ticks_us() / 1000, 'ms:')
 
 	elif mode == 'PoweringDownMode':
 		PowerOffSequenceFlag = led_sequence.power_off(PowerOffSequenceFlag)
@@ -832,7 +910,10 @@ while 1:
 
 	elif mode == 'SleepMode':
 		print('ENTER deep sleep\n')
-		ptp_sock.close()
+		try:
+			ptp_sock.close()
+		except:
+			pass
 		machine.deepsleep()
 	else:
 		print('ERROR - no mode selected area should never be entered')

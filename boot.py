@@ -20,12 +20,16 @@ def button_event(pin):  # Pin Callback
 	if pin.id() in ButtEventDict:
 		last_state = ButtEventDict[pin.id()]
 		# Down press = 1, Up press = 2
-		# print('---------------------------', pin.id(), pin())
 		# print('ButtEventDict[pin.id()]', last_state)
 		if last_state == 0 and pin() == 0:
 			last_state = 1
+			# print('\n-------Pressed Down', time.ticks_us() / 1000, 'ms:', pin.id(), pin())
 		elif last_state == 2 and pin() == 1:
 			last_state = 3
+			# print('\n-------Pressed Up', time.ticks_us() / 1000, 'ms:', pin.id(), pin())
+		else:
+			pass
+			# print('Bounce!!!!')
 
 		ButtEventDict[pin.id()] = last_state
 		# print('ButtEventDict[pin.id()]', last_state)

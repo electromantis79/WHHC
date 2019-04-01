@@ -46,35 +46,48 @@ def build_rssi_fragment_dict(value):
 	return temp_dict
 
 
-def send_events(sock, message, mode):
+def send_events(sock, message, mode, print_flag=False):
+	need_acknowledgement_flag = False
 	if message:
 		# Send some data to remote server
 		# Connect to remote server
+		tic = time.ticks_us() / 1000
+		# print('Send START', tic, 'ms')
 		json_string = json.dumps(message)
 		json_string = 'JSON_FRAGMENT' + json_string
 		try:
 			# Send the whole string
 			sock.sendall(json_string)
-			print('\nSent', time.ticks_us()/1000, 'ms:', json_string)
+			toc = time.ticks_us() / 1000
+			toc2 = time.ticks_us() / 1000
+			need_acknowledgement_flag = True
+			if print_flag:
+				print('\nSend END', toc, 'ms, Dif send', toc - tic, 'ms:', json_string)
+				print('Dif minimum =', toc2 - toc, 'ms')
 
 		except OSError as err:
 			if err.errno == 104:  # ECONNRESET
 				print("send_button_events OS error ECONNRESET:", err)
 			else:
 				print("send_button_events OS error:", err)
+			need_acknowledgement_flag = False
 
 			mode = 'SearchModes'
 			print('\n======== END Connected Modes ========\n')
 			print('\n======== BEGIN Search Modes ========\n')
 
-	return sock, mode
+	return need_acknowledgement_flag, sock, mode
 
 
-def check_receive(sock, mode, socket_created_flag):
+def check_receive(sock, mode, socket_created_flag, print_flag=False):
 	# print('\nenter check_receive')
 	data = None
 	try:
+		tic = time.ticks_us() / 1000
+		# print('Read START', tic, 'ms')
 		data = sock.read()
+		toc = time.ticks_us() / 1000
+		# print('Read END', toc, 'ms')
 
 	except OSError as err:
 		# print (err, err.errno)
@@ -100,7 +113,8 @@ def check_receive(sock, mode, socket_created_flag):
 		data = decode_bytes_to_string(data)
 
 	if data:
-		print('\nData Received', time.ticks_us()/1000, 'ms:', data)
+		if print_flag:
+			print('\nData Received', time.ticks_us() / 1000, 'ms,', 'Dif read', toc-tic, 'ms:',  data)
 
 	return sock, data, mode, socket_created_flag
 
@@ -113,7 +127,7 @@ def decode_bytes_to_string(data):
 	return string
 
 
-def find_substrings(string, substring):
+def find_substrings(string, substring, print_flag=False):
 	count = 0
 	index = 0
 	flag = True
@@ -126,7 +140,8 @@ def find_substrings(string, substring):
 			count += 1
 			index_list.append(a)
 			index = a + 1
-	print('index_list', index_list)
+	if print_flag:
+		print('index_list', index_list)
 	return index_list
 
 
@@ -156,7 +171,7 @@ def convert_to_json_format(data):
 		return False
 
 
-def check_led_data(json_tree_fragment_dict, led_dict, show=False):
+def check_led_data(json_tree_fragment_dict, led_dict, print_flag=False):
 	if json_tree_fragment_dict is not None:
 		if 'led_objects' in json_tree_fragment_dict:
 			for led in json_tree_fragment_dict['led_objects']:
@@ -167,77 +182,77 @@ def check_led_data(json_tree_fragment_dict, led_dict, show=False):
 					else:
 						led_dict[led].value(False)
 				else:
-					if show:
+					if print_flag:
 						print("\n'value' key is not in fragment of led dictionary",	led)
 		else:
-			if show:
+			if print_flag:
 				print('\nled_objects not in fragment')
 
 
-def check_get_rssi_flag(json_tree_fragment_dict, json_tree, show=False):
+def check_get_rssi_flag(json_tree_fragment_dict, json_tree, print_flag=False):
 	if json_tree_fragment_dict is not None:
 		if 'command_flags' in json_tree_fragment_dict:
 			if 'get_rssi' in json_tree_fragment_dict['command_flags']:
 				json_tree['command_flags']['get_rssi'] = json_tree_fragment_dict['command_flags']['get_rssi']
 			else:
-				if show:
+				if print_flag:
 					print('\nget_rssi not in command_flags')
 		else:
-			if show:
+			if print_flag:
 				print('\ncommand_flags not in fragment')
 
 
-def check_send_blocks_flag(json_tree_fragment_dict, json_tree, show=False):
+def check_send_blocks_flag(json_tree_fragment_dict, json_tree, print_flag=False):
 	if json_tree_fragment_dict is not None:
 		if 'command_flags' in json_tree_fragment_dict:
 			if 'send_blocks' in json_tree_fragment_dict['command_flags']:
 				json_tree['command_flags']['send_blocks'] = json_tree_fragment_dict['command_flags']['send_blocks']
 			else:
-				if show:
+				if print_flag:
 					print('\nsend_blocks not in command_flags')
 		else:
-			if show:
+			if print_flag:
 				print('\ncommand_flags not in fragment')
 
 
-def check_power_down_flag(json_tree_fragment_dict, json_tree, show=False):
+def check_power_down_flag(json_tree_fragment_dict, json_tree, print_flag=False):
 	if json_tree_fragment_dict is not None:
 		if 'command_flags' in json_tree_fragment_dict:
 			if 'power_down' in json_tree_fragment_dict['command_flags']:
 				json_tree['command_flags']['power_down'] = json_tree_fragment_dict['command_flags']['power_down']
 			else:
-				if show:
+				if print_flag:
 					print('\npower_down not in command_flags')
 		else:
-			if show:
+			if print_flag:
 				print('\ncommand_flags not in fragment')
 
 
-def check_signal_strength_display_flag(json_tree_fragment_dict, json_tree, show=False):
+def check_signal_strength_display_flag(json_tree_fragment_dict, json_tree, print_flag=False):
 	if json_tree_fragment_dict is not None:
 		if 'command_flags' in json_tree_fragment_dict:
 			if 'signal_strength_display' in json_tree_fragment_dict['command_flags']:
 				json_tree['command_flags']['signal_strength_display'] = json_tree_fragment_dict[
 					'command_flags']['signal_strength_display']
 			else:
-				if show:
+				if print_flag:
 					print('\nsignal_strength_display not in command_flags')
 		else:
-			if show:
+			if print_flag:
 				print('\ncommand_flags not in fragment')
 
 
-def check_battery_strength_display_flag(json_tree_fragment_dict, json_tree, show=False):
+def check_battery_strength_display_flag(json_tree_fragment_dict, json_tree, print_flag=False):
 	if json_tree_fragment_dict is not None:
 		if 'command_flags' in json_tree_fragment_dict:
 			if 'battery_strength_display' in json_tree_fragment_dict['command_flags']:
 				json_tree['command_flags']['battery_strength_display'] = json_tree_fragment_dict[
 					'command_flags']['battery_strength_display']
 			else:
-				if show:
+				if print_flag:
 					print('\nbattery_strength_display not in command_flags')
 		else:
-			if show:
+			if print_flag:
 				print('\ncommand_flags not in fragment')
 
 

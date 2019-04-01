@@ -22,6 +22,7 @@ class LedSequences(object):
 		self.LedDict = led_dict
 		self.timer = Timer.Chrono()
 		self.transfer_cycle_flag = False
+		self.printTimes = False
 		self.battBarThresholdOne = batt_bar_threshold[0]
 		self.battBarThresholdTwo = batt_bar_threshold[1]
 		self.battBarThresholdThree = batt_bar_threshold[2]
@@ -30,6 +31,18 @@ class LedSequences(object):
 		self.signalBarThresholdOne = signal_bar_threshold[1]
 		self.signalBarThresholdTwo = signal_bar_threshold[2]
 		self.signalBarThresholdThree = signal_bar_threshold[3]
+
+	def get_led_dict_values(self):
+		dict_values = []
+		for x in self.LedDict:
+			dict_values.append((x, self.LedDict[x].value()))
+		print(dict_values)
+		return dict_values
+
+	def set_led_dict_values(self, dict_values):
+		print(dict_values)
+		for values in dict_values:
+			self.LedDict[values[0]].value(values[1])
 
 	def all_off(self):
 		# Turn all off
@@ -48,46 +61,60 @@ class LedSequences(object):
 		if enable:
 			read = self.timer.read_ms()
 			if 0 <= read < 200:
-				print('[Clock Running] = ON', read, 'ms')
+				if self.printTimes:
+					print('[Clock Running] = ON', read, 'ms')
 				self.LedDict['P20'].value(True)
 			elif 200 <= read < 400:
-				print('[Signal Strength] = ON', read, 'ms')
+				if self.printTimes:
+					print('[Signal Strength] = ON', read, 'ms')
 				self.LedDict['P11'].value(True)
 			elif 400 <= read < 600:
-				print('[Clock Running] = OFF', read, 'ms')
+				if self.printTimes:
+					print('[Clock Running] = OFF', read, 'ms')
 				self.LedDict['P20'].value(False)
 			elif 600 <= read < 800:
-				print('[Battery Strength] = ON', read, 'ms')
+				if self.printTimes:
+					print('[Battery Strength] = ON', read, 'ms')
 				self.LedDict['P6'].value(True)
 			elif 800 <= read < 1000:
-				print('[Strength Bar 1] = ON', read, 'ms')
+				if self.printTimes:
+					print('[Strength Bar 1] = ON', read, 'ms')
 				self.LedDict['P7'].value(True)
 			elif 1000 <= read < 1200:
-				print('[Strength Bar 2] = ON', read, 'ms')
+				if self.printTimes:
+					print('[Strength Bar 2] = ON', read, 'ms')
 				self.LedDict['P8'].value(True)
 			elif 1200 <= read < 1400:
-				print('[Strength Bar 3] = ON', read, 'ms')
+				if self.printTimes:
+					print('[Strength Bar 3] = ON', read, 'ms')
 				self.LedDict['P9'].value(True)
 			elif 1400 <= read < 2000:
-				print('[Strength Bar 4] = ON', read, 'ms')
+				if self.printTimes:
+					print('[Strength Bar 4] = ON', read, 'ms')
 				self.LedDict['P10'].value(True)
 			elif 2000 <= read < 2200:
-				print('[Signal Strength] = OFF', read, 'ms')
+				if self.printTimes:
+					print('[Signal Strength] = OFF', read, 'ms')
 				self.LedDict['P11'].value(False)
 			elif 2200 <= read < 2400:
-				print('[Battery Strength] = OFF', read, 'ms')
+				if self.printTimes:
+					print('[Battery Strength] = OFF', read, 'ms')
 				self.LedDict['P6'].value(False)
 			elif 2400 <= read < 2600:
-				print('[Strength Bar 1] = OFF', read, 'ms')
+				if self.printTimes:
+					print('[Strength Bar 1] = OFF', read, 'ms')
 				self.LedDict['P7'].value(False)
 			elif 2600 <= read < 2800:
-				print('[Strength Bar 2] = OFF', read, 'ms')
+				if self.printTimes:
+					print('[Strength Bar 2] = OFF', read, 'ms')
 				self.LedDict['P8'].value(False)
 			elif 2800 <= read < 3000:
-				print('[Strength Bar 3] = OFF', read, 'ms')
+				if self.printTimes:
+					print('[Strength Bar 3] = OFF', read, 'ms')
 				self.LedDict['P9'].value(False)
 			elif 3000 <= read:
-				print('[Strength Bar 4] = OFF', read, 'ms')
+				if self.printTimes:
+					print('[Strength Bar 4] = OFF', read, 'ms')
 				self.LedDict['P10'].value(False)
 
 				self.timer.stop()
@@ -101,38 +128,48 @@ class LedSequences(object):
 		if enable:
 			read = self.timer.read_ms()
 			if 0 <= read < 400:
-				print('[Clock Running] = [Signal Strength] = [Battery Strength] = OFF', read, 'ms')
+				if self.printTimes:
+					print('[Clock Running] = [Signal Strength] = [Battery Strength] = OFF', read, 'ms')
 				self.LedDict['P20'].value(False)
 				self.LedDict['P11'].value(False)
 				self.LedDict['P6'].value(False)
-				print('[Strength Bar 1] = [Strength Bar 2] = [Strength Bar 3] = [Strength Bar 4] = ON')
+				if self.printTimes:
+					print('[Strength Bar 1] = [Strength Bar 2] = [Strength Bar 3] = [Strength Bar 4] = ON')
 				self.LedDict['P7'].value(True)
 				self.LedDict['P8'].value(True)
 				self.LedDict['P9'].value(True)
 				self.LedDict['P10'].value(True)
 			elif 400 <= read < 800:
-				print('[Signal Strength] = ON', read, 'ms')
+				if self.printTimes:
+					print('[Signal Strength] = ON', read, 'ms')
 				self.LedDict['P11'].value(True)
 			elif 800 <= read < 1000:
-				print('[Battery Strength] = ON', read, 'ms')
+				if self.printTimes:
+					print('[Battery Strength] = ON', read, 'ms')
 				self.LedDict['P6'].value(True)
 			elif 1000 <= read < 1200:
-				print('[Signal Strength] = OFF', read, 'ms')
+				if self.printTimes:
+					print('[Signal Strength] = OFF', read, 'ms')
 				self.LedDict['P11'].value(False)
 			elif 1200 <= read < 1400:
-				print('[Battery Strength] = OFF', read, 'ms')
+				if self.printTimes:
+					print('[Battery Strength] = OFF', read, 'ms')
 				self.LedDict['P6'].value(False)
 			elif 1400 <= read < 1600:
-				print('[Strength Bar 4] = OFF', read, 'ms')
+				if self.printTimes:
+					print('[Strength Bar 4] = OFF', read, 'ms')
 				self.LedDict['P10'].value(False)
 			elif 1600 <= read < 1800:
-				print('[Strength Bar 3] = OFF', read, 'ms')
+				if self.printTimes:
+					print('[Strength Bar 3] = OFF', read, 'ms')
 				self.LedDict['P9'].value(False)
 			elif 1800 <= read < 2000:
-				print('[Strength Bar 2] = OFF', read, 'ms')
+				if self.printTimes:
+					print('[Strength Bar 2] = OFF', read, 'ms')
 				self.LedDict['P8'].value(False)
 			elif 2000 <= read:
-				print('[Strength Bar 1] = OFF', read, 'ms')
+				if self.printTimes:
+					print('[Strength Bar 1] = OFF', read, 'ms')
 				self.LedDict['P7'].value(False)
 				self.timer.stop()
 				self.timer.reset()
@@ -145,7 +182,8 @@ class LedSequences(object):
 		if enable:
 			read = self.timer.read_ms()
 			if 0 <= read < 200:
-				print('All LEDs = OFF', read, 'ms')
+				if self.printTimes:
+					print('All LEDs = OFF', read, 'ms')
 				self.LedDict['P20'].value(False)
 				self.LedDict['P11'].value(False)
 				self.LedDict['P6'].value(False)
@@ -154,34 +192,44 @@ class LedSequences(object):
 				self.LedDict['P9'].value(False)
 				self.LedDict['P10'].value(False)
 			elif 200 <= read < 700:
-				print('[Signal Strength] = ON', read, 'ms')
+				if self.printTimes:
+					print('[Signal Strength] = ON', read, 'ms')
 				self.LedDict['P11'].value(True)
 			elif 700 <= read < 1000:
-				print('[Strength Bar 1] = ON', read, 'ms')
+				if self.printTimes:
+					print('[Strength Bar 1] = ON', read, 'ms')
 				self.LedDict['P7'].value(True)
 			elif 1000 <= read < 1200:
-				print('[Signal Strength] = OFF', read, 'ms')
+				if self.printTimes:
+					print('[Signal Strength] = OFF', read, 'ms')
 				self.LedDict['P11'].value(False)
 			elif 1200 <= read < 1500:
-				print('[Strength Bar 2] = ON', read, 'ms')
+				if self.printTimes:
+					print('[Strength Bar 2] = ON', read, 'ms')
 				self.LedDict['P8'].value(True)
 			elif 1500 <= read < 1700:
-				print('[Strength Bar 1] = OFF', read, 'ms')
+				if self.printTimes:
+					print('[Strength Bar 1] = OFF', read, 'ms')
 				self.LedDict['P7'].value(False)
 			elif 1700 <= read < 2000:
-				print('[Strength Bar 3] = ON', read, 'ms')
+				if self.printTimes:
+					print('[Strength Bar 3] = ON', read, 'ms')
 				self.LedDict['P9'].value(True)
 			elif 2000 <= read < 2200:
-				print('[Strength Bar 2] = OFF', read, 'ms')
+				if self.printTimes:
+					print('[Strength Bar 2] = OFF', read, 'ms')
 				self.LedDict['P8'].value(False)
 			elif 2200 <= read < 2500:
-				print('[Strength Bar 4] = ON', read, 'ms')
+				if self.printTimes:
+					print('[Strength Bar 4] = ON', read, 'ms')
 				self.LedDict['P10'].value(True)
 			elif 2500 <= read < 3000:
-				print('[Strength Bar 3] = OFF', read, 'ms')
+				if self.printTimes:
+					print('[Strength Bar 3] = OFF', read, 'ms')
 				self.LedDict['P9'].value(False)
 			elif 3000 <= read:
-				print('[Strength Bar 4] = OFF', read, 'ms')
+				if self.printTimes:
+					print('[Strength Bar 4] = OFF', read, 'ms')
 				self.LedDict['P10'].value(False)
 				self.timer.reset()
 				print('searching_for_receiver_sequence END')
@@ -193,52 +241,60 @@ class LedSequences(object):
 		if enable:
 			read = self.timer.read_ms()
 			if 0 <= read < 300:
-				print('[Clock Running] = [Battery Strength] = OFF', read, 'ms')
+				if self.printTimes:
+					print('[Clock Running] = [Battery Strength] = OFF', read, 'ms')
 				self.LedDict['P20'].value(False)
 				self.LedDict['P6'].value(False)
-				print('[Signal Strength] = [Bar 1] = [Bar 2] = [Bar 3] = [Bar 4] = ON')
+				if self.printTimes:
+					print('[Signal Strength] = [Bar 1] = [Bar 2] = [Bar 3] = [Bar 4] = ON')
 				self.LedDict['P11'].value(True)
 				self.LedDict['P7'].value(True)
 				self.LedDict['P8'].value(True)
 				self.LedDict['P9'].value(True)
 				self.LedDict['P10'].value(True)
 			elif 300 <= read < 500:
-				print('[Signal Strength] = [Bar 1] = [Bar 2] = [Bar 3] = [Bar 4] = OFF', read, 'ms')
+				if self.printTimes:
+					print('[Signal Strength] = [Bar 1] = [Bar 2] = [Bar 3] = [Bar 4] = OFF', read, 'ms')
 				self.LedDict['P11'].value(False)
 				self.LedDict['P7'].value(False)
 				self.LedDict['P8'].value(False)
 				self.LedDict['P9'].value(False)
 				self.LedDict['P10'].value(False)
 			elif 500 <= read < 800:
-				print('[Signal Strength] = [Bar 1] = [Bar 2] = [Bar 3] = [Bar 4] = ON', read, 'ms')
+				if self.printTimes:
+					print('[Signal Strength] = [Bar 1] = [Bar 2] = [Bar 3] = [Bar 4] = ON', read, 'ms')
 				self.LedDict['P11'].value(True)
 				self.LedDict['P7'].value(True)
 				self.LedDict['P8'].value(True)
 				self.LedDict['P9'].value(True)
 				self.LedDict['P10'].value(True)
 			elif 800 <= read < 1000:
-				print('[Signal Strength] = [Bar 1] = [Bar 2] = [Bar 3] = [Bar 4] = OFF', read, 'ms')
+				if self.printTimes:
+					print('[Signal Strength] = [Bar 1] = [Bar 2] = [Bar 3] = [Bar 4] = OFF', read, 'ms')
 				self.LedDict['P11'].value(False)
 				self.LedDict['P7'].value(False)
 				self.LedDict['P8'].value(False)
 				self.LedDict['P9'].value(False)
 				self.LedDict['P10'].value(False)
 			elif 1000 <= read < 1300:
-				print('[Signal Strength] = [Bar 1] = [Bar 2] = [Bar 3] = [Bar 4] = ON', read, 'ms')
+				if self.printTimes:
+					print('[Signal Strength] = [Bar 1] = [Bar 2] = [Bar 3] = [Bar 4] = ON', read, 'ms')
 				self.LedDict['P11'].value(True)
 				self.LedDict['P7'].value(True)
 				self.LedDict['P8'].value(True)
 				self.LedDict['P9'].value(True)
 				self.LedDict['P10'].value(True)
 			elif 1300 <= read < 1500:
-				print('[Signal Strength] = [Bar 1] = [Bar 2] = [Bar 3] = [Bar 4] = OFF', read, 'ms')
+				if self.printTimes:
+					print('[Signal Strength] = [Bar 1] = [Bar 2] = [Bar 3] = [Bar 4] = OFF', read, 'ms')
 				self.LedDict['P11'].value(False)
 				self.LedDict['P7'].value(False)
 				self.LedDict['P8'].value(False)
 				self.LedDict['P9'].value(False)
 				self.LedDict['P10'].value(False)
 			elif 1500 <= read:
-				print('Normal Signal Strength Mode', read, 'ms')
+				if self.printTimes:
+					print('Normal Signal Strength Mode', read, 'ms')
 				self.timer.stop()
 				self.timer.reset()
 				print('receiver_discovered_sequence END')
@@ -249,24 +305,32 @@ class LedSequences(object):
 		"""Continue this method while in this mode (until timeout)"""
 		if enable:
 			if on_off:
-				print('[Signal Strength] = ON')
+				if self.printTimes:
+					print('[Signal Strength] = ON')
 				self.LedDict['P11'].value(True)
-				print('[Battery  Strength] = OFF')
+				if self.printTimes:
+					print('[Battery  Strength] = OFF')
 				self.LedDict['P6'].value(False)
-				print('[Bar 1], [Bar 2], [Bar 3], [Bar 4] show signal strength -', rssi, 'dB')
+				if self.printTimes:
+					print('[Bar 1], [Bar 2], [Bar 3], [Bar 4] show signal strength -', rssi, 'dB')
 				self._set_signal_bars(rssi)
-				print('signal_test_sequence END')
+				if self.printTimes:
+					print('signal_test_sequence END')
 			else:
-				print('[Signal Strength] = OFF')
+				if self.printTimes:
+					print('[Signal Strength] = OFF')
 				self.LedDict['P11'].value(False)
-				print('[Battery  Strength] = OFF')
+				if self.printTimes:
+					print('[Battery  Strength] = OFF')
 				self.LedDict['P6'].value(False)
-				print('[Bar 1], [Bar 2], [Bar 3], [Bar 4] = OFF')
+				if self.printTimes:
+					print('[Bar 1], [Bar 2], [Bar 3], [Bar 4] = OFF')
 				self.LedDict['P10'].value(False)
 				self.LedDict['P9'].value(False)
 				self.LedDict['P8'].value(False)
 				self.LedDict['P7'].value(False)
-				print('signal_test_sequence END')
+				if self.printTimes:
+					print('signal_test_sequence END')
 		return enable
 
 	def _set_signal_bars(self, rssi):
@@ -301,24 +365,32 @@ class LedSequences(object):
 		if enable:
 			if on_off:
 				vbatt = get_battery_voltage(1)
-				print('[Signal Strength] = OFF')
+				if self.printTimes:
+					print('[Signal Strength] = OFF')
 				self.LedDict['P11'].value(False)
-				print('[Battery  Strength] = ON')
+				if self.printTimes:
+					print('[Battery  Strength] = ON')
 				self.LedDict['P6'].value(True)
-				print('[Bar 1], [Bar 2], [Bar 3], [Bar 4] show battery strength', vbatt, 'V')
+				if self.printTimes:
+					print('[Bar 1], [Bar 2], [Bar 3], [Bar 4] show battery strength', vbatt, 'V')
 				self._set_batt_bars(vbatt)
-				print('battery_test_sequence END')
+				if self.printTimes:
+					print('battery_test_sequence END')
 			else:
-				print('[Signal Strength] = OFF')
+				if self.printTimes:
+					print('[Signal Strength] = OFF')
 				self.LedDict['P11'].value(False)
-				print('[Battery  Strength] = OFF')
+				if self.printTimes:
+					print('[Battery  Strength] = OFF')
 				self.LedDict['P6'].value(False)
-				print('[Bar 1], [Bar 2], [Bar 3], [Bar 4] = OFF')
+				if self.printTimes:
+					print('[Bar 1], [Bar 2], [Bar 3], [Bar 4] = OFF')
 				self.LedDict['P10'].value(False)
 				self.LedDict['P9'].value(False)
 				self.LedDict['P8'].value(False)
 				self.LedDict['P7'].value(False)
-				print('battery_test_sequence END')
+				if self.printTimes:
+					print('battery_test_sequence END')
 		return enable
 
 	def _set_batt_bars(self, vbatt):
@@ -353,7 +425,8 @@ class LedSequences(object):
 		if enable:
 			read = self.timer.read_ms()
 			if 0 <= read < 4000:
-				print('All LEDs = OFF', read, 'ms')
+				if self.printTimes:
+					print('All LEDs = OFF', read, 'ms')
 				self.LedDict['P20'].value(False)
 				self.LedDict['P11'].value(False)
 				self.LedDict['P6'].value(False)
@@ -362,13 +435,16 @@ class LedSequences(object):
 				self.LedDict['P9'].value(False)
 				self.LedDict['P10'].value(False)
 			elif 4000 <= read < 5000:
-				print('[Signal Strength] = ON', read, 'ms')
+				if self.printTimes:
+					print('[Signal Strength] = ON', read, 'ms')
 				self.LedDict['P11'].value(True)
 			elif 5000 <= read:
-				print('[Signal Strength] = OFF', read, 'ms')
+				if self.printTimes:
+					print('[Signal Strength] = OFF', read, 'ms')
 				self.LedDict['P11'].value(False)
 				self.timer.reset()
-				print('connected_dark_sequence END')
+				if self.printTimes:
+					print('connected_dark_sequence END')
 		return enable
 
 	def file_transfer(self, enable=False):
@@ -376,24 +452,30 @@ class LedSequences(object):
 		if enable:
 			read = self.timer.read_ms()
 			if 0 <= read < 300:
-				print('[Battery Strength] = [Clock Running] = OFF', read, 'ms')
+				if self.printTimes:
+					print('[Battery Strength] = [Clock Running] = OFF', read, 'ms')
 				self.LedDict['P6'].value(False)
 				self.LedDict['P20'].value(False)
-				print('[Bar 1] = [Bar 2] = [Bar 3] = [Bar 4] = OFF')
+				if self.printTimes:
+					print('[Bar 1] = [Bar 2] = [Bar 3] = [Bar 4] = OFF')
 				self.LedDict['P7'].value(False)
 				self.LedDict['P8'].value(False)
 				self.LedDict['P9'].value(False)
 				self.LedDict['P10'].value(False)
-				print('[Signal Strength] = ON')
+				if self.printTimes:
+					print('[Signal Strength] = ON')
 				self.LedDict['P11'].value(True)
 			elif 300 <= read < 500:
-				print('[Bar 4] = ON', read, 'ms')
+				if self.printTimes:
+					print('[Bar 4] = ON', read, 'ms')
 				self.LedDict['P10'].value(False)
 			elif 500 <= read < 800:
-				print('[Signal Strength] = OFF', read, 'ms')
+				if self.printTimes:
+					print('[Signal Strength] = OFF', read, 'ms')
 				self.LedDict['P11'].value(False)
 			elif 800 <= read < 1000:
-				print('[Bar 4] = OFF', read, 'ms')
+				if self.printTimes:
+					print('[Bar 4] = OFF', read, 'ms')
 				self.LedDict['P10'].value(False)
 			elif 1000 <= read:
 				self.timer.reset()
@@ -408,7 +490,8 @@ class LedSequences(object):
 		if enable:
 			read = self.timer.read_ms()
 			if 0 <= read < 1000:
-				print('All LEDs = OFF', read, 'ms')
+				if self.printTimes:
+					print('All LEDs = OFF', read, 'ms')
 				self.LedDict['P20'].value(False)
 				self.LedDict['P11'].value(False)
 				self.LedDict['P6'].value(False)
@@ -417,17 +500,22 @@ class LedSequences(object):
 				self.LedDict['P9'].value(False)
 				self.LedDict['P10'].value(False)
 			elif 1000 <= read < 1800:
-				print('[Clock Running] = ON', read, 'ms')
+				if self.printTimes:
+					print('[Clock Running] = ON', read, 'ms')
 				self.LedDict['P20'].value(True)
 			elif 1800 <= read < 3000:
-				print('[Clock Running] = OFF', read, 'ms')
+				if self.printTimes:
+					print('[Clock Running] = OFF', read, 'ms')
 				self.LedDict['P20'].value(False)
 			elif 3000 <= read < 3800:
-				print('[Clock Running] = ON', read, 'ms')
+				if self.printTimes:
+					print('[Clock Running] = ON', read, 'ms')
 				self.LedDict['P20'].value(True)
 			elif 3800 <= read:
-				print('[Clock Running] = OFF', read, 'ms')
+				if self.printTimes:
+					print('[Clock Running] = OFF', read, 'ms')
 				self.LedDict['P20'].value(False)
 				self.timer.reset()
-				print('time_of_day_sequence END')
+				if self.printTimes:
+					print('time_of_day_sequence END')
 		return enable
