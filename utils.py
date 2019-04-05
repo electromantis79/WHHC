@@ -5,56 +5,45 @@ import time
 import json
 
 
-def handle_button_event(json_tree, butt_event_dict, offset):
-	event_flag = 0
-	for button in butt_event_dict:
-		if butt_event_dict[button]:
-			if butt_event_dict[button] == 1:
-				butt_event_dict[button] = 2
-				json_tree['button_objects'][button]['event_flag'] = True
-				json_tree['button_objects'][button]['event_state'] = 'down'
-				json_tree['button_objects'][button]['event_time'] = time.ticks_us() - offset
-				event_flag = 1
-			elif butt_event_dict[button] == 3:
-				butt_event_dict[button] = 0
-				json_tree['button_objects'][button]['event_flag'] = True
-				json_tree['button_objects'][button]['event_state'] = 'up'
-				json_tree['button_objects'][button]['event_time'] = time.ticks_us() - offset
-				event_flag = 1
+def convert_packet_to_string(json_tree, packet):
+	button_name = packet[0]
 
-	return json_tree, event_flag
+	if packet[1] == 0:
+		event_state = 'down'
+	elif packet[1] == 1:
+		event_state = 'up'
 
+	event_time = packet[2]
 
-def build_json_tree_fragment_dict(json_tree):
 	temp_dict = dict()
-	for button in json_tree['button_objects'].keys():
-		if button[0] == 'P' and json_tree['button_objects'][button]['event_flag']:
-			temp_dict['button_objects'] = dict()
-			temp_dict['button_objects'][button] = dict()
-			temp_dict['button_objects'][button]['event_flag'] = json_tree['button_objects'][button]['event_flag']
-			temp_dict['button_objects'][button]['event_state'] = json_tree['button_objects'][button]['event_state']
-			temp_dict['button_objects'][button]['event_time'] = json_tree['button_objects'][button]['event_time']
-			temp_dict['button_objects'][button]['keymap_grid_value'] = json_tree['button_objects'][button]['keymap_grid_value']
-			json_tree['button_objects'][button]['event_flag'] = False
+	temp_dict['button_objects'] = dict()
+	temp_dict['button_objects'][button_name] = dict()
+	temp_dict['button_objects'][button_name]['event_flag'] = True
+	temp_dict['button_objects'][button_name]['event_state'] = event_state
+	temp_dict['button_objects'][button_name]['event_time'] = event_time
+	temp_dict['button_objects'][button_name]['keymap_grid_value'] = json_tree['button_objects'][button_name]['keymap_grid_value']
+	json_string = json.dumps(temp_dict)
+	json_string_fragment = 'JSON_FRAGMENT' + json_string
 
-	return temp_dict
+	return json_string_fragment
 
 
 def build_rssi_fragment_dict(value):
 	temp_dict = dict()
 	temp_dict['rssi'] = value
-	return temp_dict
+	json_string = json.dumps(temp_dict)
+	json_string_fragment = 'JSON_FRAGMENT' + json_string
+	return json_string_fragment
 
 
-def send_events(sock, message, mode, print_flag=False):
+def send_events(sock, json_string, mode, print_flag=False):
 	need_acknowledgement_flag = False
-	if message:
+	if json_string:
 		# Send some data to remote server
 		# Connect to remote server
 		tic = time.ticks_us() / 1000
 		# print('Send START', tic, 'ms')
-		json_string = json.dumps(message)
-		json_string = 'JSON_FRAGMENT' + json_string
+
 		try:
 			# Send the whole string
 			sock.sendall(json_string)
@@ -62,14 +51,14 @@ def send_events(sock, message, mode, print_flag=False):
 			toc2 = time.ticks_us() / 1000
 			need_acknowledgement_flag = True
 			if print_flag:
-				print('\nSend END', toc, 'ms, Dif send', toc - tic, 'ms:', json_string)
-				print('Dif minimum =', toc2 - toc, 'ms')
+				print('\n        Send END', toc, 'ms, Dif send', toc - tic, 'ms:', json_string)
+				print('        Dif minimum =', toc2 - toc, 'ms')
 
 		except OSError as err:
 			if err.errno == 104:  # ECONNRESET
-				print("send_button_events OS error ECONNRESET:", err)
+				print("        send_button_events OS error ECONNRESET:", err)
 			else:
-				print("send_button_events OS error:", err)
+				print("        send_button_events OS error:", err)
 			need_acknowledgement_flag = False
 
 			mode = 'SearchModes'

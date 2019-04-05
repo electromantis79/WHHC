@@ -20,35 +20,36 @@ print('\nTop of main.py after imports', time.ticks_us() / 1000, 'ms')
 
 
 def handle_button_event_thread():
-	global ButtEventDict, mode, JsonTreeDict, offset, darkFlag, sock,\
-		printFlag, buttonThreadFrequency, need_acknowledgement_flag, block_presses_flag
-	nothing_pressed = True
+	global mode, JsonTreeDict, darkFlag, sock, printFlag, buttonThreadFrequency, button_event_buffer, need_acknowledgement_flag
 	while 1:
 		machine.idle()
 		time.sleep_ms(buttonThreadFrequency)
 		if mode == 'ConnectedMode':
-
-			# Handle button events
 			tic = time.ticks_us() / 1000
-			# print('--Event START', tic, 'ms')
 
-			if not block_presses_flag:
-				JsonTreeDict, event_flag = handle_button_event(JsonTreeDict, ButtEventDict, offset)
+			if button_event_buffer:
+				temp_button_event_buffer = list(button_event_buffer)
+				button_event_buffer = []
+				json_string = ''
 
-				# Send button events to server
-				if event_flag:
-					toc = time.ticks_us() / 1000
-					if printFlag:
-						print('Event FLAG', toc, 'ms')
-					# connected_mode_power_down_timer.stop()
-					# connected_mode_power_down_timer.reset()
-					# connected_mode_power_down_timer.start()
-					# darkFlag = False
-					json_tree_fragment_dict = build_json_tree_fragment_dict(JsonTreeDict)
-					need_acknowledgement_flag, sock, mode = send_events(sock, json_tree_fragment_dict, mode, print_flag=printFlag)
-					toc2 = time.ticks_us() / 1000
-					if printFlag:
-						print('--Event END', toc2, 'ms,', 'Dif check tree', toc-tic, 'ms,', 'Dif full send', toc2-tic, 'ms\n')
+				if printFlag:
+					print('\n--------BUFFER PROCESS START', tic, 'ms')
+
+				for packet in temp_button_event_buffer:
+					json_string_fragment = convert_packet_to_string(JsonTreeDict, packet)
+					json_string += json_string_fragment
+
+				# connected_mode_power_down_timer.stop()
+				# connected_mode_power_down_timer.reset()
+				# connected_mode_power_down_timer.start()
+				# darkFlag = False
+
+				need_acknowledgement_flag, sock, mode = send_events(sock, json_string, mode, print_flag=printFlag)
+
+				toc = time.ticks_us() / 1000
+
+				if printFlag:
+					print('\n--------BUFFER PROCESS END', toc, 'ms,', 'Dif BUFFER PROCESS', toc-tic, 'ms\n')
 
 
 def get_rssi_thread(wlan):
@@ -63,6 +64,8 @@ def get_rssi_thread(wlan):
 			print('Scorenet found with RSSI =', rssi)
 			rssi = str(rssi)[1:]
 			rssi = int(rssi)
+
+	time.sleep_ms(200)  # Gives time for received packets to be parsed between threads
 	after = time.ticks_ms()
 	print('rssi thread took', str((after - before) / 1000), 'seconds')
 	rssiThreadRunning = False
@@ -273,6 +276,7 @@ rssiThreadRunning = False
 sendBlocksFlag = False
 need_acknowledgement_flag = False
 block_presses_flag = False
+button_event_buffer = []
 led_dict_values = []
 acknowledgement_count = 0
 startRssiForSendBlocksThreadFlag = True
@@ -307,7 +311,6 @@ TransferFilesCompleteFlag = False
 SocketConnectedFlag = False
 socketCreatedFlag = False
 socketCreatedCount = 0
-offset = 0
 mode = 'SearchModes'
 led_sequence = LedSequences(LedDict)
 printFlag = True
@@ -404,10 +407,6 @@ while PowerOnSequenceFlag:
 	machine.idle()
 	time.sleep_ms(50)
 
-# Clear any button presses
-for button in ButtEventDict:
-	ButtEventDict[button] = 0
-
 # Change LED from flashing blue default to solid red
 pycom.heartbeat(False)
 pycom.rgbled(0xff0000)
@@ -480,84 +479,90 @@ while 1:
 			search_mode_timer.reset()
 			search_mode_timer.start()
 
-		# Handle button presses
-		for button in ButtEventDict:
-			if ButtEventDict[button] == 1:
-				# Down Press
-				print('\nDown Press', button)
-				ButtEventDict[button] = 2
-				long_press_timer.start()
-				if button == 'P23':
-					# MODE button
-					search_mode_timer.stop()
-					search_mode_timer.reset()
-					# TOGGLE Search Mode and Search Battery Test Mode
-					if not SearchBatteryTestModeFlag:
-						print('\nENTER Search Battery Test Mode')
-						SearchBatteryTestModeFlag = True
-						battery_mode_timer.start()
-						led_sequence.timer.stop()
-						led_sequence.timer.reset()
-						print('\n======== END Search Mode ========\n')
-						print('\n======== BEGIN Search Battery Test Mode ========\n')
-					else:
-						print('\nENTER Search Mode')
-						SearchBatteryTestModeFlag = False
-						battery_mode_timer.stop()
-						battery_mode_timer.reset()
-						search_mode_timer.start()
-						led_sequence.timer.start()
-						print('\n======== END Search Battery Test Mode ========\n')
-						print('\n======== BEGIN Search Mode ========\n')
-				else:
-					# Any other button
-					print('search_mode_timer', search_mode_timer.read(), 's.')
-					search_mode_timer.reset()
-					print('search_mode_timer after reset', search_mode_timer.read(), 's.')
-					if SearchBatteryTestModeFlag:
-						print('\nENTER Search Battery Test Mode')
-						SearchBatteryTestModeFlag = False
-						battery_mode_timer.stop()
-						battery_mode_timer.reset()
-						search_mode_timer.start()
-						led_sequence.timer.start()
-						print('\n======== END Search Battery Test Mode ========\n')
-						print('\n======== BEGIN Search Mode ========\n')
+		if button_event_buffer:
+			temp_button_event_buffer = list(button_event_buffer)
+			button_event_buffer = []
 
-			elif ButtEventDict[button] == 3:
-				# Up Press
-				print('\nUp Press', button)
-				ButtEventDict[button] = 0
-				if button == 'P23':
-					# MODE button
-					if long_press_timer.read() > LongPressTimeoutDuration:
-						print('\nLong press detected at', long_press_timer.read(), 's.')
-						long_press_timer.stop()
-						long_press_timer.reset()
-						# ENTER Sleep Mode with Power Off Sequence
-						print('\n======== END Search Mode ========\n')
-						print('\n======== BEGIN Power Off Sequence Mode ========\n')
-						mode = 'PoweringDownMode'
-						led_sequence.timer.stop()
-						led_sequence.timer.reset()
-						led_sequence.timer.start()
-					else:
-						long_press_timer.stop()
-						print('\nLong press NOT detected at', long_press_timer.read(), 's.')
-						long_press_timer.reset()
+			# Handle button presses
+			for packet in temp_button_event_buffer:
+				button_name = packet[0]
+				event_state = packet[1]
+				event_time = packet[2]
 
+				if event_state == 0:
+					# Down Press
+					print('\nDown Press', button_name)
+					if button_name == 'P23':
+						# MODE button
+						long_press_timer.start()
+						search_mode_timer.stop()
+						search_mode_timer.reset()
+						# TOGGLE Search Mode and Search Battery Test Mode
+						if not SearchBatteryTestModeFlag:
+							print('\nENTER Search Battery Test Mode')
+							SearchBatteryTestModeFlag = True
+							battery_mode_timer.start()
+							led_sequence.timer.stop()
+							led_sequence.timer.reset()
+							print('\n======== END Search Mode ========\n')
+							print('\n======== BEGIN Search Battery Test Mode ========\n')
+						else:
+							print('\nENTER Search Mode')
+							SearchBatteryTestModeFlag = False
+							battery_mode_timer.stop()
+							battery_mode_timer.reset()
+							search_mode_timer.start()
+							led_sequence.timer.start()
+							print('\n======== END Search Battery Test Mode ========\n')
+							print('\n======== BEGIN Search Mode ========\n')
+					else:
+						# Any other button
+						print('search_mode_timer', search_mode_timer.read(), 's.')
+						search_mode_timer.reset()
+						print('search_mode_timer after reset', search_mode_timer.read(), 's.')
+						if SearchBatteryTestModeFlag:
+							print('\nENTER Search Battery Test Mode')
+							SearchBatteryTestModeFlag = False
+							battery_mode_timer.stop()
+							battery_mode_timer.reset()
+							search_mode_timer.start()
+							led_sequence.timer.start()
+							print('\n======== END Search Battery Test Mode ========\n')
+							print('\n======== BEGIN Search Mode ========\n')
+
+				elif event_state == 1:
+					# Up Press
+					print('\nUp Press', button_name)
+					if button_name == 'P23':
+						# MODE button
+						if long_press_timer.read() > LongPressTimeoutDuration:
+							print('\nLong press detected at', long_press_timer.read(), 's.')
+							long_press_timer.stop()
+							long_press_timer.reset()
+							# ENTER Sleep Mode with Power Off Sequence
+							print('\n======== END Search Mode ========\n')
+							print('\n======== BEGIN Power Off Sequence Mode ========\n')
+							mode = 'PoweringDownMode'
+							led_sequence.timer.stop()
+							led_sequence.timer.reset()
+							led_sequence.timer.start()
+						else:
+							long_press_timer.stop()
+							print('\nLong press NOT detected at', long_press_timer.read(), 's.')
+							long_press_timer.reset()
+
+							print('search_mode_timer', search_mode_timer.read(), 's.')
+							search_mode_timer.stop()
+							search_mode_timer.reset()
+							search_mode_timer.start()
+							print('search_mode_timer after reset', search_mode_timer.read(), 's.')
+					else:
+						# Any other button
 						print('search_mode_timer', search_mode_timer.read(), 's.')
 						search_mode_timer.stop()
 						search_mode_timer.reset()
 						search_mode_timer.start()
 						print('search_mode_timer after reset', search_mode_timer.read(), 's.')
-				else:
-					# Any other button
-					print('search_mode_timer', search_mode_timer.read(), 's.')
-					search_mode_timer.stop()
-					search_mode_timer.reset()
-					search_mode_timer.start()
-					print('search_mode_timer after reset', search_mode_timer.read(), 's.')
 
 		if wlan.isconnected() and mode != 'PoweringDownMode':
 
@@ -568,7 +573,7 @@ while 1:
 					try:
 						# Create an AF_INET, STREAM socket (TCP)
 						sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-						print('Socket Created', time.ticks_us()/1000, 'ms:')
+						# print('Socket Created', time.ticks_us()/1000, 'ms:')
 						socketCreatedFlag = True
 						SearchBatteryTestModeFlag = False
 						led_sequence.timer.start()
@@ -587,13 +592,14 @@ while 1:
 					SocketConnectedFlag = True
 
 				except OSError as err:
-					print("connect_socket OS error:", err)
-					print('Failed to connect to ' + HOST, ': socketCreatedCount', socketCreatedCount)
+					# print("connect_socket OS error:", err)
+					# print('Failed to connect to ' + HOST, ': socketCreatedCount', socketCreatedCount)
+					sock.close()
 					socketCreatedCount += 1
-					if socketCreatedCount > 50:
+					if socketCreatedCount > 5:
 						socketCreatedCount = 0
 						socketCreatedFlag = False
-						print('Kick New Socket Creation', time.ticks_us()/1000, 'ms:')
+						# print('Kick New Socket Creation', time.ticks_us()/1000, 'ms:')
 
 			if SocketConnectedFlag:
 				SocketConnectedFlag = False
@@ -688,7 +694,7 @@ while 1:
 			darkFlag = True
 
 		# Handle button events
-		JsonTreeDict, event_flag = handle_button_event(JsonTreeDict, ButtEventDict, offset)
+		JsonTreeDict, event_flag = handle_button_event(JsonTreeDict, PreviousButtonValueDict, offset)
 
 		# Send button events to server
 		if event_flag:
@@ -735,7 +741,7 @@ while 1:
 				print('\nData Processed', toc, 'ms, Dif Proc', toc - tic, 'ms')
 		else:
 			if need_acknowledgement_flag:
-				if acknowledgement_count >= 3 and not block_presses_flag:
+				if acknowledgement_count >= 3 and not block_presses_flag:  # This waits around 200ms before triggering
 					acknowledgement_count = 0
 					need_acknowledgement_flag = False
 					block_presses_flag = True
@@ -754,8 +760,8 @@ while 1:
 				print('after thread start', time.ticks_us() / 1000, 'ms: rssi =', rssi)
 
 			if not rssiThreadRunning and rssi is not None:
-				json_tree_fragment_dict = build_rssi_fragment_dict(rssi)
-				need_acknowledgement_flag, sock, mode = send_events(sock, json_tree_fragment_dict, mode)
+				json_string_fragment = build_rssi_fragment_dict(rssi)
+				need_acknowledgement_flag, sock, mode = send_events(sock, json_string_fragment, mode)
 				print('rssi sent', time.ticks_us() / 1000, 'ms')
 				startRssiThreadFlag = True
 
@@ -771,8 +777,8 @@ while 1:
 
 			if not rssiThreadRunning and rssi is not None and not rssiSentForSendBlocks:
 				rssiSentForSendBlocks = True
-				json_tree_fragment_dict = build_rssi_fragment_dict(rssi)
-				need_acknowledgement_flag, sock, mode = send_events(sock, json_tree_fragment_dict, mode)
+				json_string_fragment = build_rssi_fragment_dict(rssi)
+				need_acknowledgement_flag, sock, mode = send_events(sock, json_string_fragment, mode)
 				print('rssi sent', time.ticks_ms())
 				print('Start send_blocks')
 				_thread.start_new_thread(send_blocks_thread, [])
@@ -781,7 +787,8 @@ while 1:
 			if not startRssiForSendBlocksThreadFlag and rssiSentForSendBlocks and not sendBlocksFlag:
 				JsonTreeDict['command_flags']['send_blocks'] = False
 				print('Test 2 Done in main loop')
-				ButtEventDict['P23'] = 3  # Pretend mode was pressed up to trigger close on RD
+				button_event_buffer.append(
+					('P23', 1, time.ticks_us() - offset))  # Pretend mode was pressed up to trigger close on RD
 				connected_mode_power_down_timer.stop()
 				connected_mode_power_down_timer.reset()
 				connected_mode_power_down_timer.start()
@@ -862,6 +869,8 @@ while 1:
 				except OSError as err:
 					print("create_socket OS error:", err)
 					print('Failed to create socket.')
+					machine.reset()
+
 			else:
 				try:
 					ptp_sock.connect((HOST, PTP_PORT))
@@ -872,8 +881,9 @@ while 1:
 				except OSError as err:
 					print("connect_socket OS error:", err)
 					print('Failed to connect to ' + HOST, ': PtpSocketCreatedCount', PtpSocketCreatedCount)
+					ptp_sock.close()
 					PtpSocketCreatedCount += 1
-					if PtpSocketCreatedCount > 50:
+					if PtpSocketCreatedCount > 3:
 						PtpSocketCreatedCount = 0
 						PtpSocketCreatedFlag = False
 						print('Kick New PTP Socket Creation', time.ticks_us() / 1000, 'ms')

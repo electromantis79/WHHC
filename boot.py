@@ -16,23 +16,45 @@ from os import dupterm
 
 
 def button_event(pin):  # Pin Callback
-	global ButtEventDict
-	if pin.id() in ButtEventDict:
-		last_state = ButtEventDict[pin.id()]
-		# Down press = 1, Up press = 2
-		# print('ButtEventDict[pin.id()]', last_state)
-		if last_state == 0 and pin() == 0:
-			last_state = 1
-			# print('\n-------Pressed Down', time.ticks_us() / 1000, 'ms:', pin.id(), pin())
-		elif last_state == 2 and pin() == 1:
-			last_state = 3
-			# print('\n-------Pressed Up', time.ticks_us() / 1000, 'ms:', pin.id(), pin())
-		else:
-			pass
-			# print('Bounce!!!!')
+	global PreviousButtonValueDict, offset, button_event_buffer, block_presses_flag
 
-		ButtEventDict[pin.id()] = last_state
-		# print('ButtEventDict[pin.id()]', last_state)
+	event_time = time.ticks_us()
+	current_value = pin()
+	button_name = pin.id()
+	if button_name in PreviousButtonValueDict:
+		previous_value = PreviousButtonValueDict[button_name]
+
+		print(
+			'\n----START CALLBACK',
+			'\n\n    button_name =', button_name, ', previous_value =', previous_value, ', current_value =', current_value)
+
+		if not block_presses_flag:
+			load_buffer = False
+
+			# Find direction
+			if previous_value == 1 and current_value == 0:  # FALLING
+				print('\n    falling_time', event_time / 1000, 'ms')
+				load_buffer = True
+
+			elif previous_value == 0 and current_value == 1:  # RISING
+				print('\n    rising_time', event_time / 1000)
+				load_buffer = True
+
+			else:
+				print('\n    NO TRANSITION!!!!', event_time / 1000, 'ms')
+
+			if load_buffer:
+				packet = (button_name, current_value, event_time - offset)
+				button_event_buffer.append(packet)
+
+			PreviousButtonValueDict[button_name] = current_value
+
+		else:
+			print('\n    block_presses_flag', True)
+
+		event_end_time = time.ticks_us()
+		print('    function time', (event_end_time - event_time) / 1000, 'ms')
+		print('\n----END CALLBACK')
 
 
 # enable the UART on the USB-to-serial port
@@ -50,8 +72,11 @@ print(os.uname())
 print('\nPython version', sys.version)
 print('Unique ID', machine.unique_id(), 'Frequency', machine.freq())
 
-
 print('\nAfter boot messages', time.ticks_us() / 1000, 'ms')
+
+offset = 0
+button_event_buffer = []
+block_presses_flag = False
 
 # LED definitions ==========================================
 LedDict = dict()
@@ -97,8 +122,7 @@ ButtPinList = list(ButtDict.keys())
 
 print('\nAfter ButtDict', time.ticks_us() / 1000, 'ms')
 
-ButtEventDict = dict.fromkeys(ButtPinList, 0)
-# print('\nButtEventDict', ButtEventDict)
+PreviousButtonValueDict = dict.fromkeys(ButtPinList, 1)
 
 # Button Interrupts
 for x in ButtPinList:
@@ -113,7 +137,7 @@ if machine.reset_cause() == machine.DEEPSLEEP_RESET:
 	print('\nReturn from DEEP SLEEP')
 	if not ButtDict['P23'].value():
 		button = 'P23'
-		ButtEventDict[button] = 1
+		deep_down_flag = True
 	else:
 		print('ENTER deep sleep AGAIN\n')
 		machine.deepsleep()
@@ -122,17 +146,17 @@ if machine.reset_cause() == machine.DEEPSLEEP_RESET:
 		machine.idle()
 		time.sleep_ms(10)
 
-		if ButtEventDict[button] == 1:
+		if deep_down_flag:
+			deep_down_flag = False
 			# Down Press
 			print('\nDown Press - LEDs on', button, time.ticks_us() / 1000, 'ms')
-			ButtEventDict[button] = 2
+
 			# Turn all on
 			for x in LedPinList:
 				LedDict[x].value(True)
 
-		elif ButtEventDict[button] == 3:
+		if ButtDict['P23'].value():
 			# Up Press
-			ButtEventDict[button] = 0
 			print('\nUp Press', button, time.ticks_us() / 1000, 'ms')
 			print('\nRECOVER from Sleep Mode', time.ticks_us() / 1000, 'ms\n')
 			break
