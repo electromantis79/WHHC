@@ -1,5 +1,5 @@
 from machine import Timer
-from utils import *
+from utils import get_battery_voltage
 
 
 class LedSequences(object):

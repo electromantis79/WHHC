@@ -1,32 +1,38 @@
-# main.py -- put your code here!
+# imports from boot.py do not need to be re-imported
 
-import machine
-import sys
-import time
+main_start_time = time.ticks_us() / 1000
+print('\nTop of main.py before imports', main_start_time, 'ms')
+
 import pycom
-import micropython
 import json
-import _thread
+import socket
 
 from network import WLAN
-from machine import Pin
-from machine import Timer
-from utils import *
-from led_sequences import LedSequences
+from _thread import start_new_thread
+from utils import *  # Takes almost a second to load
+from led_sequences import LedSequences  # Takes over a second to load
 
-print('\nTop of main.py after imports', time.ticks_us() / 1000, 'ms')
+import_end_time = time.ticks_us() / 1000
+print(
+	'\nTop of main.py after imports', import_end_time,
+	'ms, Dif imports', import_end_time - main_start_time, 'ms')
 
 # Functions using global must be in the main.py file for some reason
 
+# === Threads running continuously ===
+
 
 def handle_button_event_thread():
-	global mode, JsonTreeDict, darkFlag, sock, printFlag, buttonThreadFrequency, button_event_buffer, need_acknowledgement_flag
+	global mode, KeyMapDict, darkFlag, connected_mode_power_down_timer, sock, printFlag, \
+		buttonThreadFrequency, button_event_buffer, need_acknowledgement_flag
+
 	while 1:
 		machine.idle()
 		time.sleep_ms(buttonThreadFrequency)
 		if mode == 'ConnectedMode':
 			tic = time.ticks_us() / 1000
 
+			# If pin callback has load the event buffer convert and send all events
 			if button_event_buffer:
 				temp_button_event_buffer = list(button_event_buffer)
 				button_event_buffer = []
@@ -35,69 +41,24 @@ def handle_button_event_thread():
 				if printFlag:
 					print('\n--------BUFFER PROCESS START', tic, 'ms')
 
+				# Convert each event to a json fragment with header and add back-to-back to json_string
 				for packet in temp_button_event_buffer:
-					json_string_fragment = convert_packet_to_string(JsonTreeDict, packet)
+					json_string_fragment = convert_packet_to_json_string_fragment(KeyMapDict, packet)
 					json_string += json_string_fragment
 
-				# connected_mode_power_down_timer.stop()
-				# connected_mode_power_down_timer.reset()
-				# connected_mode_power_down_timer.start()
-				# darkFlag = False
-
+				# Send json_string over network
 				need_acknowledgement_flag, sock, mode = send_events(sock, json_string, mode, print_flag=printFlag)
+
+				# Handle events triggered by a button event occurring
+				connected_mode_power_down_timer.stop()
+				connected_mode_power_down_timer.reset()
+				connected_mode_power_down_timer.start()
+				darkFlag = False
 
 				toc = time.ticks_us() / 1000
 
 				if printFlag:
 					print('\n--------BUFFER PROCESS END', toc, 'ms,', 'Dif BUFFER PROCESS', toc-tic, 'ms\n')
-
-
-def get_rssi_thread(wlan):
-	global rssi, rssiThreadRunning
-	before = time.ticks_ms()
-	time.sleep_ms(200)  # Gives time for received packets to be parsed between threads
-
-	nets = wlan.scan()
-	for net in nets:
-		if net.ssid == 'ScoreNet':
-			rssi = net.rssi
-			print('Scorenet found with RSSI =', rssi)
-			rssi = str(rssi)[1:]
-			rssi = int(rssi)
-
-	time.sleep_ms(200)  # Gives time for received packets to be parsed between threads
-	after = time.ticks_ms()
-	print('rssi thread took', str((after - before) / 1000), 'seconds')
-	rssiThreadRunning = False
-
-
-def send_blocks_thread():
-	global sendBlocksFlag, sock, mode, block_data, need_acknowledgement_flag
-	block_data = 'dfgdfg45345dfgdfgd4sdg8sdgj348u'
-	Steps = 4
-	Transmits = 4
-	steps = Steps
-	transmits = Transmits
-	while sendBlocksFlag:
-		while steps and sendBlocksFlag:
-			while transmits and sendBlocksFlag:
-				stamp = str(get_ticks_us(offset))
-				message = block_data + '@' + str(steps) + '@' + stamp + '@' + str(transmits)
-				need_acknowledgement_flag, sock, mode = send_events(sock, message, mode)
-				time.sleep_ms(100)
-				transmits -= 1
-				machine.idle()
-
-			block_data = block_data + block_data
-			transmits = Transmits
-			steps -= 1
-			time.sleep_ms(2000)
-			machine.idle()
-
-		machine.idle()
-		sendBlocksFlag = False
-
-	print('send_blocks_thread END')
 
 
 def ptp_thread():
@@ -257,6 +218,56 @@ def ptp_thread():
 
 		machine.idle()
 
+# === Threads running once only ===
+
+
+def get_rssi_thread(wlan):
+	global rssi, rssiThreadRunning
+	before = time.ticks_ms()
+	time.sleep_ms(200)  # Gives time for received packets to be parsed between threads
+
+	nets = wlan.scan()
+	for net in nets:
+		if net.ssid == 'ScoreNet':
+			rssi = net.rssi
+			print('Scorenet found with RSSI =', rssi)
+			rssi = str(rssi)[1:]
+			rssi = int(rssi)
+
+	time.sleep_ms(200)  # Gives time for received packets to be parsed between threads
+	after = time.ticks_ms()
+	print('rssi thread took', str((after - before) / 1000), 'seconds')
+	rssiThreadRunning = False
+
+
+def send_blocks_thread():
+	global sendBlocksFlag, sock, mode, block_data, need_acknowledgement_flag
+	block_data = 'dfgdfg45345dfgdfgd4sdg8sdgj348u'
+	Steps = 4
+	Transmits = 4
+	steps = Steps
+	transmits = Transmits
+	while sendBlocksFlag:
+		while steps and sendBlocksFlag:
+			while transmits and sendBlocksFlag:
+				stamp = str(get_ticks_us(offset))
+				message = block_data + '@' + str(steps) + '@' + stamp + '@' + str(transmits)
+				need_acknowledgement_flag, sock, mode = send_events(sock, message, mode)
+				time.sleep_ms(100)
+				transmits -= 1
+				machine.idle()
+
+			block_data = block_data + block_data
+			transmits = Transmits
+			steps -= 1
+			time.sleep_ms(2000)
+			machine.idle()
+
+		machine.idle()
+		sendBlocksFlag = False
+
+	print('send_blocks_thread END')
+
 
 # Initialize ---------------------------------------------------
 
@@ -315,7 +326,8 @@ mode = 'SearchModes'
 led_sequence = LedSequences(LedDict)
 printFlag = True
 
-timePin = Pin('P22', mode=Pin.OUT)
+# Pin used only for testing ptp server with logic analyzer
+timePin = machine.Pin('P22', mode=machine.Pin.OUT)
 timePin.value(False)
 
 # Turn all off
@@ -392,24 +404,33 @@ with open('tree.json', 'w') as f:
 # print('\njson_string', json_string)
 
 # Timers
-search_mode_timer = Timer.Chrono()
-battery_mode_timer = Timer.Chrono()
-long_press_timer = Timer.Chrono()
-connected_mode_power_down_timer = Timer.Chrono()
+search_mode_timer = machine.Timer.Chrono()
+battery_mode_timer = machine.Timer.Chrono()
+long_press_timer = machine.Timer.Chrono()
+connected_mode_power_down_timer = machine.Timer.Chrono()
 
 # Test voltage sense function
 vbatt = get_battery_voltage(1)
 
 # LED Power On Sequence
+power_on_start_time = time.ticks_us() / 1000
+print('power_on_start_time', power_on_start_time, 'ms')
 led_sequence.timer.start()
 while PowerOnSequenceFlag:
 	PowerOnSequenceFlag = led_sequence.power_on(PowerOnSequenceFlag)
 	machine.idle()
 	time.sleep_ms(50)
+power_on_end_time = time.ticks_us() / 1000
 
 # Change LED from flashing blue default to solid red
 pycom.heartbeat(False)
 pycom.rgbled(0xff0000)
+
+main_end_time = time.ticks_us() / 1000
+print(
+	'\nEND of Initialization', main_end_time,
+	'ms, Dif LED PWR ON', power_on_end_time - power_on_start_time,
+	'ms, Dif Init', main_end_time - main_start_time, 'ms')
 
 # END Boot Up Mode -----------------------
 
@@ -432,12 +453,11 @@ else:
 	wlan.ifconfig(config=('192.168.8.145', '255.255.255.0', '192.168.8.1', '8.8.8.8'))
 	print('done.\nConnecting to WiFi network...')
 	wlan.connect(ssid=SSID, auth=AUTH)
-	Pin('P12', mode=Pin.OUT)(True)
+	machine.Pin('P12', mode=machine.Pin.OUT)(True)
 	wlan.antenna(WLAN.EXT_ANT)
 
-_thread.start_new_thread(ptp_thread, [])
-_thread.start_new_thread(handle_button_event_thread, [])
-
+start_new_thread(handle_button_event_thread, [])
+start_new_thread(ptp_thread, [])
 
 search_mode_timer.start()
 led_sequence.timer.start()
@@ -447,7 +467,7 @@ print('\n====== ENTERING MAIN LOOP ======')
 # MAIN loop
 while 1:
 	machine.idle()
-	time.sleep_ms(MainLoopFrequencyMs)
+	time.sleep_ms(MainLoopFrequencyMs)  # Currently must be 50ms for all timed events to work right
 
 	if mode == 'SearchModes':
 
@@ -479,6 +499,7 @@ while 1:
 			search_mode_timer.reset()
 			search_mode_timer.start()
 
+		# Check and handle button events
 		if button_event_buffer:
 			temp_button_event_buffer = list(button_event_buffer)
 			button_event_buffer = []
@@ -564,6 +585,7 @@ while 1:
 						search_mode_timer.start()
 						print('search_mode_timer after reset', search_mode_timer.read(), 's.')
 
+		# When wifi connection is established attempt to connect socket to main server
 		if wlan.isconnected() and mode != 'PoweringDownMode':
 
 			if not SocketConnectedFlag:
@@ -607,6 +629,7 @@ while 1:
 				PtpSocketConnectedFlag = False
 
 				mode = 'DiscoveredMode'
+
 				long_press_timer.stop()
 				long_press_timer.reset()
 				search_mode_timer.stop()
@@ -615,6 +638,7 @@ while 1:
 				battery_mode_timer.reset()
 				led_sequence.timer.stop()
 				led_sequence.timer.reset()
+
 				ip, mask, gateway, dns = wlan.ifconfig()
 				print('IP address: ', ip)
 				print('Netmask:    ', mask)
@@ -675,8 +699,7 @@ while 1:
 		# print('\nConnectedMode')
 		# print('\nnConnectedMode start', time.ticks_us() / 1000, 'ms:')
 		'''
-
-		# Search Mode Timer Check
+		# connected_mode_power_down_timer checks
 		if connected_mode_power_down_timer.read() > ConnectedPowerDownTimeoutDuration:
 			print('\nconnected_mode_power_down_timer triggered at ', connected_mode_power_down_timer.read(), 's.')
 			connected_mode_power_down_timer.stop()
@@ -692,23 +715,12 @@ while 1:
 			print('\nconnected_mode_dark_timer triggered at ', connected_mode_power_down_timer.read(), 's.')
 			led_sequence.all_off()
 			darkFlag = True
-
-		# Handle button events
-		JsonTreeDict, event_flag = handle_button_event(JsonTreeDict, PreviousButtonValueDict, offset)
-
-		# Send button events to server
-		if event_flag:
-			connected_mode_power_down_timer.stop()
-			connected_mode_power_down_timer.reset()
-			connected_mode_power_down_timer.start()
-			darkFlag = False
-			json_tree_fragment_dict = build_json_tree_fragment_dict(JsonTreeDict)
-			sock, mode = send_events(sock, json_tree_fragment_dict, mode)
 		'''
 
 		# Check for data
 		sock, data, mode, socketCreatedFlag = check_receive(sock, mode, socketCreatedFlag, print_flag=printFlag)
 
+		# Parse and handle incoming data
 		if data:
 			# Format data
 			tic = time.ticks_us() / 1000
@@ -751,37 +763,37 @@ while 1:
 				else:
 					acknowledgement_count += 1
 
-		# React to get_rssi
+		# React to get_rssi (Test mode 1)
 		if JsonTreeDict['command_flags']['get_rssi'] and not block_presses_flag:
 			if startRssiThreadFlag:
 				startRssiThreadFlag = False
 				rssiThreadRunning = True
-				_thread.start_new_thread(get_rssi_thread, [wlan])
+				start_new_thread(get_rssi_thread, [wlan])
 				print('after thread start', time.ticks_us() / 1000, 'ms: rssi =', rssi)
 
 			if not rssiThreadRunning and rssi is not None:
-				json_string_fragment = build_rssi_fragment_dict(rssi)
+				json_string_fragment = build_rssi_json_string_fragment(rssi)
 				need_acknowledgement_flag, sock, mode = send_events(sock, json_string_fragment, mode)
 				print('rssi sent', time.ticks_us() / 1000, 'ms')
 				startRssiThreadFlag = True
 
-		# React to send_blocks
+		# React to send_blocks (Test mode 2)
 		send_blocks = JsonTreeDict['command_flags']['send_blocks']
 		if send_blocks:
 			if startRssiForSendBlocksThreadFlag:
 				startRssiForSendBlocksThreadFlag = False
 				rssiThreadRunning = True
 				sendBlocksFlag = True
-				_thread.start_new_thread(get_rssi_thread, [wlan])
+				start_new_thread(get_rssi_thread, [wlan])
 				print('after thread start', time.ticks_ms(), 'rssi =', rssi)
 
 			if not rssiThreadRunning and rssi is not None and not rssiSentForSendBlocks:
 				rssiSentForSendBlocks = True
-				json_string_fragment = build_rssi_fragment_dict(rssi)
+				json_string_fragment = build_rssi_json_string_fragment(rssi)
 				need_acknowledgement_flag, sock, mode = send_events(sock, json_string_fragment, mode)
 				print('rssi sent', time.ticks_ms())
 				print('Start send_blocks')
-				_thread.start_new_thread(send_blocks_thread, [])
+				start_new_thread(send_blocks_thread, [])
 				print('after thread start', time.ticks_ms())
 
 			if not startRssiForSendBlocksThreadFlag and rssiSentForSendBlocks and not sendBlocksFlag:
@@ -814,7 +826,7 @@ while 1:
 			LedDict['P10'].value(True)
 			LedDict['P11'].value(True)
 			rssiThreadRunning = True
-			_thread.start_new_thread(get_rssi_thread, [wlan])
+			start_new_thread(get_rssi_thread, [wlan])
 			print('after thread start', time.ticks_ms(), 'rssi =', rssi)
 
 		# React to signal_strength_thread ending
@@ -856,7 +868,7 @@ while 1:
 			else:
 				battery_strength_display_count += 1
 
-		# React to Connected
+		# Run ptp server if connected
 		if ptp_thread_flag and not PtpSocketConnectedFlag:
 			# Create and connect a socket
 			if not PtpSocketCreatedFlag:
@@ -920,10 +932,13 @@ while 1:
 
 	elif mode == 'SleepMode':
 		print('ENTER deep sleep\n')
+
 		try:
 			ptp_sock.close()
+			sock.close()
 		except:
 			pass
+
 		machine.deepsleep()
 	else:
 		print('ERROR - no mode selected area should never be entered')

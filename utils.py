@@ -1,34 +1,42 @@
-import socket
-import machine
-import math
 import time
 import json
 
+from math import sqrt
+from machine import ADC
 
-def convert_packet_to_string(json_tree, packet):
+
+def convert_packet_to_json_string_fragment(key_map_dict, packet):
+	# Decode packet
 	button_name = packet[0]
 
 	if packet[1] == 0:
 		event_state = 'down'
 	elif packet[1] == 1:
 		event_state = 'up'
+	else:
+		event_state = 'error'
 
 	event_time = packet[2]
 
+	# Build temp_dict
 	temp_dict = dict()
 	temp_dict['button_objects'] = dict()
 	temp_dict['button_objects'][button_name] = dict()
 	temp_dict['button_objects'][button_name]['event_flag'] = True
 	temp_dict['button_objects'][button_name]['event_state'] = event_state
 	temp_dict['button_objects'][button_name]['event_time'] = event_time
-	temp_dict['button_objects'][button_name]['keymap_grid_value'] = json_tree['button_objects'][button_name]['keymap_grid_value']
+	temp_dict['button_objects'][button_name]['keymap_grid_value'] = key_map_dict[button_name]
+
+	# Convert to json
 	json_string = json.dumps(temp_dict)
+
+	# Add header
 	json_string_fragment = 'JSON_FRAGMENT' + json_string
 
 	return json_string_fragment
 
 
-def build_rssi_fragment_dict(value):
+def build_rssi_json_string_fragment(value):
 	temp_dict = dict()
 	temp_dict['rssi'] = value
 	json_string = json.dumps(temp_dict)
@@ -48,11 +56,9 @@ def send_events(sock, json_string, mode, print_flag=False):
 			# Send the whole string
 			sock.sendall(json_string)
 			toc = time.ticks_us() / 1000
-			toc2 = time.ticks_us() / 1000
 			need_acknowledgement_flag = True
 			if print_flag:
 				print('\n        Send END', toc, 'ms, Dif send', toc - tic, 'ms:', json_string)
-				print('        Dif minimum =', toc2 - toc, 'ms')
 
 		except OSError as err:
 			if err.errno == 104:  # ECONNRESET
@@ -256,7 +262,7 @@ def get_battery_voltage(show=0):
 	} adc_atten_t;
 	"""
 	number_of_adc_readings = const(100)
-	adc = machine.ADC(0)
+	adc = ADC(0)
 	adcread = adc.channel(attn=2, pin='P19')
 	samples_adc = [0.0]*number_of_adc_readings
 	mean_adc = 0.0
@@ -277,7 +283,7 @@ def get_battery_voltage(show=0):
 		print("Mean of ADC readings (0-4095) = %15.13f" % mean_adc)
 		print("Mean of ADC readings (0-1846 mV) = %15.13f" % (mean_adc*1846/4096))  # Calibrated manually
 		print("Variance of ADC readings = %15.13f" % variance_adc)
-		print("Standard Deviation of ADC readings = %15.13f" % math.sqrt(variance_adc))
+		print("Standard Deviation of ADC readings = %15.13f" % sqrt(variance_adc))
 		if mean_adc:
 			print("10**6*Variance/(Mean**2) of ADC readings = %15.13f" % ((variance_adc*10**6)//(mean_adc**2)))
 		else:
