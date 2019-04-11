@@ -324,6 +324,9 @@ socketCreatedFlag = False
 socketCreatedCount = 0
 mode = 'SearchModes'
 led_sequence = LedSequences(LedDict)
+commandFlagList = [
+	'get_rssi', 'receiver_rssi', 'send_blocks', 'power_down',
+	'signal_strength_display', 'battery_strength_display']
 printFlag = True
 
 # Pin used only for testing ptp server with logic analyzer
@@ -394,7 +397,7 @@ for pin in KeyMapDict:
 
 
 # Build JSON hierarchy ==========================================
-JsonTreeDict = build_json_tree(LedDict, ButtDict, LedInfoDict, ButtonInfoDict)
+JsonTreeDict = build_json_tree(LedDict, ButtDict, LedInfoDict, ButtonInfoDict, commandFlagList)
 # print('\nJsonTreeDict', JsonTreeDict)
 
 # Write tree.json file
@@ -652,7 +655,7 @@ while 1:
 
 				# Rebuild fresh json tree
 				led_sequence.all_off()
-				JsonTreeDict = build_json_tree(LedDict, ButtDict, LedInfoDict, ButtonInfoDict)
+				JsonTreeDict = build_json_tree(LedDict, ButtDict, LedInfoDict, ButtonInfoDict, commandFlagList)
 
 	elif mode == 'DiscoveredMode':
 		ReceiverDiscoveredFlag = led_sequence.receiver_discovered(ReceiverDiscoveredFlag)
@@ -742,12 +745,9 @@ while 1:
 			# Process data
 			for fragment in fragment_list:
 				if not battery_strength_display and not signal_strength_thread_flag and not signal_strength_display:
-					check_led_data(fragment, LedDict, print_flag=False)
-				check_get_rssi_flag(fragment, JsonTreeDict, print_flag=False)
-				check_send_blocks_flag(fragment, JsonTreeDict, print_flag=False)
-				check_power_down_flag(fragment, JsonTreeDict, print_flag=False)
-				check_signal_strength_display_flag(fragment, JsonTreeDict, print_flag=False)
-				check_battery_strength_display_flag(fragment, JsonTreeDict, print_flag=False)
+					LedDict = check_led_data(fragment, LedDict, print_flag=False)
+					JsonTreeDict = check_command_flags(fragment, JsonTreeDict, commandFlagList, print_flag=False)
+
 			toc = time.ticks_us() / 1000
 			if printFlag:
 				print('\nData Processed', toc, 'ms, Dif Proc', toc - tic, 'ms')
@@ -808,6 +808,11 @@ while 1:
 			startRssiForSendBlocksThreadFlag = True
 			rssiSentForSendBlocks = False
 			sendBlocksFlag = False
+
+		# React to receiver_rssi event  (Test mode 4)
+		if JsonTreeDict['command_flags']['receiver_rssi']:
+			JsonTreeDict['command_flags']['receiver_rssi'] = False
+			print('\nreceiver_rssi flag received')
 
 		# React to power_down event
 		if JsonTreeDict['command_flags']['power_down']:

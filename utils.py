@@ -183,72 +183,23 @@ def check_led_data(json_tree_fragment_dict, led_dict, print_flag=False):
 			if print_flag:
 				print('\nled_objects not in fragment')
 
+	return led_dict
 
-def check_get_rssi_flag(json_tree_fragment_dict, json_tree, print_flag=False):
+
+def check_command_flags(json_tree_fragment_dict, json_tree, flag_list, print_flag=False):
 	if json_tree_fragment_dict is not None:
 		if 'command_flags' in json_tree_fragment_dict:
-			if 'get_rssi' in json_tree_fragment_dict['command_flags']:
-				json_tree['command_flags']['get_rssi'] = json_tree_fragment_dict['command_flags']['get_rssi']
-			else:
-				if print_flag:
-					print('\nget_rssi not in command_flags')
+			for flag in flag_list:
+				if flag in json_tree_fragment_dict['command_flags']:
+					json_tree['command_flags'][flag] = json_tree_fragment_dict['command_flags'][flag]
+				else:
+					if print_flag:
+						print('\n', flag, ' not in command_flags')
 		else:
 			if print_flag:
 				print('\ncommand_flags not in fragment')
 
-
-def check_send_blocks_flag(json_tree_fragment_dict, json_tree, print_flag=False):
-	if json_tree_fragment_dict is not None:
-		if 'command_flags' in json_tree_fragment_dict:
-			if 'send_blocks' in json_tree_fragment_dict['command_flags']:
-				json_tree['command_flags']['send_blocks'] = json_tree_fragment_dict['command_flags']['send_blocks']
-			else:
-				if print_flag:
-					print('\nsend_blocks not in command_flags')
-		else:
-			if print_flag:
-				print('\ncommand_flags not in fragment')
-
-
-def check_power_down_flag(json_tree_fragment_dict, json_tree, print_flag=False):
-	if json_tree_fragment_dict is not None:
-		if 'command_flags' in json_tree_fragment_dict:
-			if 'power_down' in json_tree_fragment_dict['command_flags']:
-				json_tree['command_flags']['power_down'] = json_tree_fragment_dict['command_flags']['power_down']
-			else:
-				if print_flag:
-					print('\npower_down not in command_flags')
-		else:
-			if print_flag:
-				print('\ncommand_flags not in fragment')
-
-
-def check_signal_strength_display_flag(json_tree_fragment_dict, json_tree, print_flag=False):
-	if json_tree_fragment_dict is not None:
-		if 'command_flags' in json_tree_fragment_dict:
-			if 'signal_strength_display' in json_tree_fragment_dict['command_flags']:
-				json_tree['command_flags']['signal_strength_display'] = json_tree_fragment_dict[
-					'command_flags']['signal_strength_display']
-			else:
-				if print_flag:
-					print('\nsignal_strength_display not in command_flags')
-		else:
-			if print_flag:
-				print('\ncommand_flags not in fragment')
-
-
-def check_battery_strength_display_flag(json_tree_fragment_dict, json_tree, print_flag=False):
-	if json_tree_fragment_dict is not None:
-		if 'command_flags' in json_tree_fragment_dict:
-			if 'battery_strength_display' in json_tree_fragment_dict['command_flags']:
-				json_tree['command_flags']['battery_strength_display'] = json_tree_fragment_dict[
-					'command_flags']['battery_strength_display']
-			else:
-				if print_flag:
-					print('\nbattery_strength_display not in command_flags')
-		else:
-			if print_flag:
-				print('\ncommand_flags not in fragment')
+	return json_tree
 
 
 def get_battery_voltage(show=0):
@@ -332,7 +283,7 @@ def get_ticks_us(offset):
 
 
 def build_json_tree(
-		led_dict, button_dict, led_info_dict, button_info_dict):
+		led_dict, button_dict, led_info_dict, button_info_dict, flag_list):
 	json_tree = dict()
 	json_tree['led_objects'] = dict()
 	json_tree['led_objects']['component_type'] = 'led'
@@ -362,11 +313,8 @@ def build_json_tree(
 		json_tree['button_objects'][button]['event_state'] = 'up'
 
 	json_tree['command_flags'] = dict()
-	json_tree['command_flags']['get_rssi'] = False
-	json_tree['command_flags']['send_blocks'] = False
-	json_tree['command_flags']['power_down'] = False
-	json_tree['command_flags']['signal_strength_display'] = False
-	json_tree['command_flags']['battery_strength_display'] = False
+	for flag in flag_list:
+		json_tree['command_flags'][flag] = False
 
 	json_tree['rssi'] = None
 	return json_tree
