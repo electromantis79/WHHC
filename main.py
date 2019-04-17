@@ -1,31 +1,272 @@
-# main.py -- put your code here!
+# imports from boot.py do not need to be re-imported
 
-import machine
-import sys
-import time
+main_start_time = time.ticks_us() / 1000
+print('\nTop of main.py before imports', main_start_time, 'ms')
+
 import pycom
+import json
+import socket
 
 from network import WLAN
-from machine import Pin
-from machine import Timer
-from utils import *
-from led_sequences import LedSequences
+from _thread import start_new_thread
+from utils import *  # Takes almost a second to load
+from led_sequences import LedSequences  # Takes over a second to load
+
+import_end_time = time.ticks_us() / 1000
+print(
+	'\nTop of main.py after imports', import_end_time,
+	'ms, Dif imports', import_end_time - main_start_time, 'ms')
+
+# Functions using global must be in the main.py file for some reason
+
+# === Threads running continuously ===
 
 
-def button_event(pin):  # Pin Callback
-	global ButtEventDict
-	if pin.id() in ButtEventDict:
-		last_state = ButtEventDict[pin.id()]
-		# Down press = 1, Up press = 2
-		# print('---------------------------', pin.id(), pin())
-		# print('ButtEventDict[pin.id()]', last_state)
-		if last_state == 0 and pin() == 0:
-			last_state = 1
-		elif last_state == 2 and pin() == 1:
-			last_state = 3
+def handle_button_event_thread():
+	global mode, KeyMapDict, darkFlag, connected_mode_power_down_timer, sock, printFlag, \
+		buttonThreadFrequency, button_event_buffer, need_acknowledgement_flag
 
-		ButtEventDict[pin.id()] = last_state
-		# print('ButtEventDict[pin.id()]', last_state)
+	while 1:
+		machine.idle()
+		time.sleep_ms(buttonThreadFrequency)
+		if mode == 'ConnectedMode':
+			tic = time.ticks_us() / 1000
+
+			# If pin callback has load the event buffer convert and send all events
+			if button_event_buffer:
+				temp_button_event_buffer = list(button_event_buffer)
+				button_event_buffer = []
+				json_string = ''
+
+				if printFlag:
+					print('\n--------BUFFER PROCESS START', tic, 'ms')
+
+				# Convert each event to a json fragment with header and add back-to-back to json_string
+				for packet in temp_button_event_buffer:
+					json_string_fragment = convert_packet_to_json_string_fragment(KeyMapDict, packet)
+					json_string += json_string_fragment
+
+				# Send json_string over network
+				need_acknowledgement_flag, sock, mode = send_events(sock, json_string, mode, print_flag=printFlag)
+
+				# Handle events triggered by a button event occurring
+				connected_mode_power_down_timer.stop()
+				connected_mode_power_down_timer.reset()
+				connected_mode_power_down_timer.start()
+				darkFlag = False
+
+				toc = time.ticks_us() / 1000
+
+				if printFlag:
+					print('\n--------BUFFER PROCESS END', toc, 'ms,', 'Dif BUFFER PROCESS', toc-tic, 'ms\n')
+
+
+def ptp_thread():
+	global ptp_sock, PtpSocketConnectedFlag, timePin, offset, ptp_thread_flag
+	ptp_thread_flag = True
+	sync_string = 'SYNC'
+	follow_up_string = 'FOLLOW_UP'
+	delay_request_string = 'DELAY_REQUEST'
+	delay_response_string = 'DELAY_RESPONSE'
+	sync_flag = False
+	follow_up_flag = False
+	delay_response_flag = False
+	time_1 = None
+	time_2 = None
+	time_3 = None
+	time_4 = None
+	offsetList = []
+	offsetCount = 0
+	check_socket_count = 0
+	print_ptp_messages = False
+	while 1:
+		if PtpSocketConnectedFlag and ptp_sock is not None:
+			data = None
+			try:
+				data = ptp_sock.read()
+				read_time = time.ticks_us()
+
+			except OSError as err:
+				# print (err, err.errno)
+
+				if err.errno == 11:
+					# Don't care about error here. It is normal for .recv() if non-blocking to wait for device to be ready
+					print('special 11 spot', err)
+				elif err.errno == 113:
+					print("check_receive OS error:", err)
+				elif err.errno == 104:  # ECONNRESET
+					print("check_receive OS error ECONNRESET:", err)
+				else:
+					print("check_receive OS error GENERIC:", err)
+
+				ptp_sock.close()
+				PtpSocketConnectedFlag = False
+
+			if data is not None:
+				data = decode_bytes_to_string(data)
+
+			if data:
+				if print_ptp_messages:
+					print('\nData Received', read_time, 'us:', data)
+				check_socket_count = 0
+
+				if data[:len(sync_string)] == sync_string:
+					valid, time_stamp = validate_ptp_string(data, sync_string, print_messages=print_ptp_messages)
+					if valid:
+						sync_flag = True
+						time_2 = read_time
+						timePin.value(True)  # This is redundant in next function but is here for faster toggle
+						toggle_pin_ms(timePin, repeat_quantity=2)
+						if print_ptp_messages:
+							print('time_2=', time_2)
+
+						estimated_time = time_stamp
+						if print_ptp_messages:
+							print('estimated_time', estimated_time)
+					else:
+						sync_flag = False
+						follow_up_flag = False
+						delay_response_flag = False
+
+				elif data[:len(follow_up_string)] == follow_up_string:
+					valid, time_stamp = validate_ptp_string(data, follow_up_string, print_messages=print_ptp_messages)
+					if valid:
+						follow_up_flag = True
+						time_1 = time_stamp
+						guess = time.ticks_us() - offset
+						# print('time_1=', time_1, 'guess', guess, 'diff guess', guess - time_1)
+
+						try:
+							# Send the whole string
+							ptp_sock.sendall(delay_request_string + ' ' + str(guess + 7000))
+							time_3 = time.ticks_us()
+
+							timePin.value(True)  # This is redundant in next function but is here for faster toggle
+							toggle_pin_ms(timePin, repeat_quantity=3)
+							if print_ptp_messages:
+								print('time_3=', time_3)
+
+							if print_ptp_messages:
+								print('\nSent', time_3, 'us:', delay_request_string)
+
+						except OSError as err:
+							if err.errno == 104:  # ECONNRESET
+								print("send_button_events OS error ECONNRESET:", err)
+							else:
+								print("send_button_events OS error:", err)
+					else:
+						sync_flag = False
+						follow_up_flag = False
+						delay_response_flag = False
+
+				elif data[:len(delay_response_string)] == delay_response_string:
+					valid, time_stamp = validate_ptp_string(data, delay_response_string, print_messages=print_ptp_messages)
+					if valid:
+						delay_response_flag = True
+						time_4 = time_stamp
+						if print_ptp_messages:
+							print('time_4=', time_4)
+
+					else:
+						sync_flag = False
+						follow_up_flag = False
+						delay_response_flag = False
+
+				if (
+						sync_flag and follow_up_flag and delay_response_flag and
+						time_1 is not None and time_2 is not None and time_3 is not None and time_4 is not None
+				):
+					offset_temp, one_way_delay = calculate_time_values(time_1, time_2, time_3, time_4, print_messages=print_ptp_messages)
+					if one_way_delay > 3000:
+						offsetList.append(offsetCount)
+						offsetCount = 0
+						if print_ptp_messages:
+							print('Skipped offset change!!!!')
+					else:
+						offsetCount += 1
+						offset = offset_temp
+						if print_ptp_messages:
+							print(offsetList)
+
+					master_clock_time = time.ticks_us() - offset
+					if print_ptp_messages:
+						print('master_clock_time', int(master_clock_time))
+					sync_flag = False
+					follow_up_flag = False
+					delay_response_flag = False
+
+			if check_socket_count > 1100:
+				check_socket_count = 0
+				try:
+					# Send the whole string
+					ptp_sock.sendall('CHECK_CONNECTED')
+					if print_ptp_messages:
+						print('\nSent', time.ticks_us() / 1000, 'ms:', 'CHECK_CONNECTED')
+
+				except OSError as err:
+					if err.errno == 104:  # ECONNRESET
+						print("send_button_events OS error ECONNRESET:", err)
+					else:
+						print("send_button_events OS error:", err)
+
+					ptp_sock.close()
+					PtpSocketConnectedFlag = False
+			else:
+				check_socket_count += 1
+
+			time.sleep_ms(1)
+
+		machine.idle()
+
+# === Threads running once only ===
+
+
+def get_rssi_thread(wlan):
+	global rssi, rssiThreadRunning
+	before = time.ticks_ms()
+	time.sleep_ms(200)  # Gives time for received packets to be parsed between threads
+
+	nets = wlan.scan()
+	for net in nets:
+		if net.ssid == 'ScoreNet':
+			rssi = net.rssi
+			print('Scorenet found with RSSI =', rssi)
+			rssi = str(rssi)[1:]
+			rssi = int(rssi)
+
+	time.sleep_ms(200)  # Gives time for received packets to be parsed between threads
+	after = time.ticks_ms()
+	print('rssi thread took', str((after - before) / 1000), 'seconds')
+	rssiThreadRunning = False
+
+
+def send_blocks_thread():
+	global sendBlocksFlag, sock, mode, block_data, need_acknowledgement_flag
+	block_data = 'dfgdfg45345dfgdfgd4sdg8sdgj348u'
+	Steps = 4
+	Transmits = 4
+	steps = Steps
+	transmits = Transmits
+	while sendBlocksFlag:
+		while steps and sendBlocksFlag:
+			while transmits and sendBlocksFlag:
+				stamp = str(get_ticks_us(offset))
+				message = block_data + '@' + str(steps) + '@' + stamp + '@' + str(transmits)
+				need_acknowledgement_flag, sock, mode = send_events(sock, message, mode)
+				time.sleep_ms(100)
+				transmits -= 1
+				machine.idle()
+
+			block_data = block_data + block_data
+			transmits = Transmits
+			steps -= 1
+			time.sleep_ms(2000)
+			machine.idle()
+
+		machine.idle()
+		sendBlocksFlag = False
+
+	print('send_blocks_thread END')
 
 
 # Initialize ---------------------------------------------------
@@ -33,6 +274,7 @@ def button_event(pin):  # Pin Callback
 # Constants
 HOST = '192.168.8.1'
 PORT = 60032
+PTP_PORT = 60042
 SSID = 'ScoreNet'
 AUTH = (WLAN.WPA2, 'centari008')
 
@@ -40,10 +282,37 @@ AUTH = (WLAN.WPA2, 'centari008')
 
 message = None
 rssi = None
-SearchTimeoutDuration = 20
+vbatt = None
+rssiThreadRunning = False
+sendBlocksFlag = False
+need_acknowledgement_flag = False
+block_presses_flag = False
+button_event_buffer = []
+led_dict_values = []
+acknowledgement_count = 0
+startRssiForSendBlocksThreadFlag = True
+rssiSentForSendBlocks = False
+startRssiThreadFlag = True
+startPtpFlag = False
+ptp_thread_flag = False
+PtpSocketCreatedFlag = False
+PtpSocketConnectedFlag = False
+PtpSocketCreatedCount = 0
+ptp_sock = None
+block_data = ''
+battery_strength_display = False
+battery_strength_display_count = 0
+signal_strength_thread_flag = False
+signal_strength_display = False
+signal_strength_display_count = 0
+SearchTimeoutDuration = 60
 BatteryTimeoutDuration = 3
 LongPressTimeoutDuration = 2.5
+ConnectedDarkTimeoutDuration = 10
+ConnectedPowerDownTimeoutDuration = 760
 MainLoopFrequencyMs = 50
+buttonThreadFrequency = 5
+darkFlag = False
 PowerOffSequenceFlag = True
 PowerOnSequenceFlag = True
 SearchBatteryTestModeFlag = False
@@ -51,140 +320,120 @@ ReceiverDiscoveredFlag = False
 TransferFilesFlag = False
 TransferFilesCompleteFlag = False
 SocketConnectedFlag = False
+socketCreatedFlag = False
+socketCreatedCount = 0
 mode = 'SearchModes'
+led_sequence = LedSequences(LedDict)
+commandFlagList = [
+	'get_rssi', 'receiver_rssi', 'send_blocks', 'power_down',
+	'signal_strength_display', 'battery_strength_display']
+printFlag = True
 
-# LED definitions
-LedDict = {}
-LedDict['P13'] = Pin(Pin.exp_board.G5, mode=Pin.OUT)  # PIN_1  = LED_5 = topLed = PWM_1[5]
-LedDict['P18'] = Pin(Pin.exp_board.G30, mode=Pin.OUT)  # PIN_13 = LED_6 = signalLed
-LedDict['P17'] = Pin(Pin.exp_board.G31, mode=Pin.OUT)  # PIN_14 = LED_4 = strengthLedTop
-# LedDict['P16'] = Pin(Pin.exp_board.G3, mode=Pin.OUT)  # PIN_15 = LED_3 = strengthLedMiddleTop
-LedDict['P15'] = Pin(Pin.exp_board.G0, mode=Pin.OUT)   # PIN_16 = LED_2 = strengthLedMiddleBottom
-LedDict['P14'] = Pin(Pin.exp_board.G4, mode=Pin.OUT)   # PIN_17 = LED_1 = strengthLedBottom
-LedDict['P19'] = Pin(Pin.exp_board.G6, mode=Pin.OUT)  # PIN_18 = LED_7 = batteryLed
-
-# LedDict['P2'] = Pin(Pin.module.P2, mode = Pin.OUT)#WiPy Heartbeat pin
-LedPinList = list(LedDict.keys())
-print('\nLedDict', LedDict)
+# Pin used only for testing ptp server with logic analyzer
+timePin = machine.Pin('P22', mode=machine.Pin.OUT)
+timePin.value(False)
 
 # Turn all off
-for x in LedPinList:
-	LedDict[x].value(False)
+led_sequence.all_off()
 
-led_sequence = LedSequences(LedDict)
+# Build LedInfoDict ----------------------------------------
+LedInfoDict = dict.fromkeys(LedPinList)
+for pin in LedInfoDict:
+	LedInfoDict[pin] = dict()
 
-# 10-Button Baseball Keypad
-ButtDict = {}
-ButtDict['P23'] = Pin(
-	Pin.exp_board.G10, mode=Pin.IN, pull=Pin.PULL_UP)  # PIN_19 = BUTT_0 = KEY_10 = modeButt
-ButtDict['P11'] = Pin(
-	Pin.exp_board.G22, mode=Pin.IN, pull=Pin.PULL_UP)  # PIN_4 = BUTT_1 = KEY_9 = outPlusButt = CX_DETECT
-ButtDict['P10'] = Pin(
-	Pin.exp_board.G17, mode=Pin.IN, pull=Pin.PULL_UP)  # PIN_5 = BUTT_2 = KEY_8 = strikePlusButt =  = LED2_IN
-# BUTTON ON EXPANSION BOARD
+LedPinVsNumberList = [
+	('P20', '5'), ('P11', '6'), ('P10', '4'), ('P9', '3'), ('P8', '2'), ('P7', '1'), ('P6', '7')]
+for pin in LedPinVsNumberList:
+	LedInfoDict[pin[0]]['led_id'] = pin[1]
 
-ButtDict['P9'] = Pin(
-	Pin.exp_board.G16, mode=Pin.IN, pull=Pin.PULL_UP)  # PIN_6 = BUTT_3 = KEY_7 = ballPlusButt = PIC_RX2/LED1_IN
-ButtDict['P8'] = Pin(
-	Pin.exp_board.G15, mode=Pin.IN, pull=Pin.PULL_UP)  # PIN_7 = BUTT_4 = KEY_6 = homeMinusButt = RUN
-ButtDict['P7'] = Pin(
-	Pin.exp_board.G14, mode=Pin.IN, pull=Pin.PULL_UP)  # PIN_8 = BUTT_5 = KEY_5 = inningPlusButt = STOP
-ButtDict['P6'] = Pin(
-	Pin.exp_board.G13, mode=Pin.IN, pull=Pin.PULL_UP)  # PIN_9 = BUTT_6 = KEY_4 = guestMinusButt = RUN/STOP CLOCK
-ButtDict['P5'] = Pin(
-	Pin.exp_board.G12, mode=Pin.IN, pull=Pin.PULL_UP)  # PIN_10 = BUTT_7 = KEY_3 = homePlusButt = RUN/STOP DGT
-ButtDict['P4'] = Pin(
-	Pin.exp_board.G11, mode=Pin.IN, pull=Pin.PULL_UP)  # PIN_11 = BUTT_8 = KEY_2 = clockToggleButt = RESET 2
-ButtDict['P3'] = Pin(
-	Pin.exp_board.G24, mode=Pin.IN, pull=Pin.PULL_UP)  # PIN_12 = BUTT_9 = KEY_1 = guestPlusButt = RESET 1
-ButtPinList = list(ButtDict.keys())
-print('\nButtDict', ButtDict, '\nButtPinList', ButtPinList)
+LedPinVsKeypadPinList = [
+	('P20', '2'), ('P11', '13'), ('P10', '14'), ('P9', '15'), ('P8', '16'), ('P7', '17'), ('P6', '18')]
+for pin in LedPinVsKeypadPinList:
+	LedInfoDict[pin[0]]['keypad_pin_number'] = pin[1]
 
-ButtEventDict = dict.fromkeys(ButtPinList, 0)
-print('\nButtEventDict', ButtEventDict)
+LedPinVsFunctionNameList = [
+	('P20', 'topLed'), ('P11', 'signalLed'), ('P10', 'strengthLedTop'), ('P9', 'strengthLedMiddleTop'),
+	('P8', 'strengthLedMiddleBottom'), ('P7', 'strengthLedBottom'), ('P6', 'batteryLed')]
+for pin in LedPinVsFunctionNameList:
+	LedInfoDict[pin[0]]['function_name'] = pin[1]
 
+# Build ButtonInfoDict -----------------------------------
+ButtonInfoDict = dict.fromkeys(ButtPinList)
+for pin in ButtonInfoDict:
+	ButtonInfoDict[pin] = dict()
 
-# Pin dictionary and its reverse used to get pin id string out of callback
-PinDict = {}
-PinList = []
-PinList.extend(LedPinList)
-PinList.extend(ButtPinList)
-print('\nPinList', PinList)
-PinRange = range(len(PinList))
-for x, y in enumerate(PinList):
-	PinDict[y] = PinRange[x]
-print('\nPinDict', PinDict)
-PinDictReverse = {}
-for x, y in enumerate(PinRange):
-	PinDictReverse[y] = PinList[x]
-print('\nPinDictReverse', PinDictReverse)
+ButtonPinVsNumberList = [
+	('P23', '0'), ('P5', '1'), ('P4', '2'), ('P3', '3'), ('P18', '4'), ('P17', '5'), ('P16', '6'),
+	('P15', '7'), ('P14', '8'), ('P13', '9')]
+for pin in ButtonPinVsNumberList:
+	ButtonInfoDict[pin[0]]['button_id'] = pin[1]
+
+ButtonPinVsKeypadPinList = [
+	('P23', '19'), ('P5', '4'), ('P4', '5'), ('P3', '6'), ('P18', '7'), ('P17', '8'), ('P16', '9'),
+	('P15', '10'), ('P14', '11'), ('P13', '12')]
+for pin in ButtonPinVsKeypadPinList:
+	ButtonInfoDict[pin[0]]['keypad_pin_number'] = pin[1]
+
+ButtonPinVsFunctionNameList = [
+	('P23', 'modeButt'), ('P5', 'outPlusButt'), ('P4', 'strikePlusButt'), ('P3', 'ballPlusButt'),
+	('P18', 'homeMinusButt'), ('P17', 'inningPlusButt'), ('P16', 'guestMinusButt'),
+	('P15', 'homePlusButt'), ('P14', 'clockToggleButt'), ('P13', 'guestPlusButt')]
+for pin in ButtonPinVsFunctionNameList:
+	ButtonInfoDict[pin[0]]['function_name'] = pin[1]
 
 # Translation dictionary for key names, correct this if pins ever change
 KeyDict = {
-	'P23': 'KEY_10', 'P11': 'KEY_9', 'P10': 'KEY_8', 'P9': 'KEY_7', 'P8': 'KEY_6', 'P7': 'KEY_5',
-	'P6': 'KEY_4', 'P5': 'KEY_3', 'P4': 'KEY_2', 'P3': 'KEY_1'}
-print('\nKeyDict', KeyDict)
+	'P23': '10', 'P5': '9', 'P4': '8', 'P3': '7', 'P18': '6', 'P17': '5',
+	'P16': '4', 'P15': '3', 'P14': '2', 'P13': '1'}
+for pin in KeyDict:
+	ButtonInfoDict[pin]['keypad_key_number'] = KeyDict[pin]
 
 # Translation dictionary for key names, correct this if pins ever change
 KeyMapDict = {
-	'P23': 'E7', 'P11': 'D6', 'P10': 'D7', 'P9': 'D8', 'P8': 'C6', 'P7': 'C7', 'P6': 'C8', 'P5': 'B6',
-	'P4': 'B7', 'P3': 'B8'}
-print('\nKeyMapDict', KeyMapDict)
+	'P23': 'E7', 'P5': 'D6', 'P4': 'D7', 'P3': 'D8', 'P18': 'C6', 'P17': 'C7', 'P16': 'C8', 'P15': 'B6',
+	'P14': 'B7', 'P13': 'B8'}
+for pin in KeyMapDict:
+	ButtonInfoDict[pin]['keymap_grid_value'] = KeyMapDict[pin]
 
-# Button Interrupts
-for x in ButtPinList:
-	ButtDict[x].callback(trigger=Pin.IRQ_FALLING | Pin.IRQ_RISING, handler=button_event)
 
-machine.pin_deepsleep_wakeup(['P23'], machine.WAKEUP_ALL_LOW, enable_pull=True)
+# Build JSON hierarchy ==========================================
+JsonTreeDict = build_json_tree(LedDict, ButtDict, LedInfoDict, ButtonInfoDict, commandFlagList)
+# print('\nJsonTreeDict', JsonTreeDict)
+
+# Write tree.json file
+with open('tree.json', 'w') as f:
+	json_string = json.dumps(JsonTreeDict)
+	f.write(json_string)
+# print('\njson_string', json_string)
 
 # Timers
-search_mode_timer = Timer.Chrono()
-battery_mode_timer = Timer.Chrono()
-long_press_timer = Timer.Chrono()
-
-if machine.reset_cause() == machine.DEEPSLEEP_RESET:
-	# sleep if button not being held then continue on release
-	print('\nReturn from DEEP SLEEP')
-	if not ButtDict['P23'].value():
-		button = 'P23'
-		ButtEventDict[button] = 1
-	else:
-		print('ENTER deep sleep AGAIN\n')
-		machine.deepsleep()
-
-	while 1:
-		machine.idle()
-		time.sleep_ms(50)
-
-		if ButtEventDict[button] == 1:
-			# Down Press
-			print('\nDown Press', button)
-			ButtEventDict[button] = 2
-
-		elif ButtEventDict[button] == 3:
-			# Up Press
-			print('\nUp Press', button)
-			ButtEventDict[button] = 0
-			print('\nRECOVER from Sleep Mode\n')
-			break
+search_mode_timer = machine.Timer.Chrono()
+battery_mode_timer = machine.Timer.Chrono()
+long_press_timer = machine.Timer.Chrono()
+connected_mode_power_down_timer = machine.Timer.Chrono()
 
 # Test voltage sense function
 vbatt = get_battery_voltage(1)
 
 # LED Power On Sequence
+power_on_start_time = time.ticks_us() / 1000
+print('power_on_start_time', power_on_start_time, 'ms')
 led_sequence.timer.start()
 while PowerOnSequenceFlag:
 	PowerOnSequenceFlag = led_sequence.power_on(PowerOnSequenceFlag)
 	machine.idle()
 	time.sleep_ms(50)
-
-# Clear any button presses
-for button in ButtEventDict:
-	ButtEventDict[button] = 0
+power_on_end_time = time.ticks_us() / 1000
 
 # Change LED from flashing blue default to solid red
 pycom.heartbeat(False)
 pycom.rgbled(0xff0000)
+
+main_end_time = time.ticks_us() / 1000
+print(
+	'\nEND of Initialization', main_end_time,
+	'ms, Dif LED PWR ON', power_on_end_time - power_on_start_time,
+	'ms, Dif Init', main_end_time - main_start_time, 'ms')
 
 # END Boot Up Mode -----------------------
 
@@ -207,6 +456,11 @@ else:
 	wlan.ifconfig(config=('192.168.8.145', '255.255.255.0', '192.168.8.1', '8.8.8.8'))
 	print('done.\nConnecting to WiFi network...')
 	wlan.connect(ssid=SSID, auth=AUTH)
+	machine.Pin('P12', mode=machine.Pin.OUT)(True)
+	wlan.antenna(WLAN.EXT_ANT)
+
+start_new_thread(handle_button_event_thread, [])
+start_new_thread(ptp_thread, [])
 
 search_mode_timer.start()
 led_sequence.timer.start()
@@ -216,13 +470,13 @@ print('\n====== ENTERING MAIN LOOP ======')
 # MAIN loop
 while 1:
 	machine.idle()
-	time.sleep_ms(MainLoopFrequencyMs)
+	time.sleep_ms(MainLoopFrequencyMs)  # Currently must be 50ms for all timed events to work right
 
 	if mode == 'SearchModes':
 
 		# LED Sequences
 		led_sequence.searching_for_receiver(not SearchBatteryTestModeFlag)
-		led_sequence.battery_test(SearchBatteryTestModeFlag)
+		led_sequence.battery_test(enable=SearchBatteryTestModeFlag, on_off=True)
 
 		# Search Mode Timer Check
 		if search_mode_timer.read() > SearchTimeoutDuration:
@@ -241,96 +495,120 @@ while 1:
 			led_sequence.timer.start()
 			# ENTER Search Mode
 			SearchBatteryTestModeFlag = False
+			led_sequence.battery_test(enable=SearchBatteryTestModeFlag, on_off=False)
 			print('\n======== END Search Battery Test Mode ========\n')
 			print('\n======== BEGIN Search Mode ========\n')
+			search_mode_timer.stop()
+			search_mode_timer.reset()
+			search_mode_timer.start()
 
-		# Handle button presses
-		for button in ButtEventDict:
-			if ButtEventDict[button] == 1:
-				# Down Press
-				print('\nDown Press', button)
-				ButtEventDict[button] = 2
-				if button == 'P23':
-					# MODE button
-					long_press_timer.start()
-					search_mode_timer.stop()
-					search_mode_timer.reset()
-					# TOGGLE Search Mode and Search Battery Test Mode
-					if not SearchBatteryTestModeFlag:
-						print('\nENTER Search Battery Test Mode')
-						SearchBatteryTestModeFlag = True
-						battery_mode_timer.start()
-						led_sequence.timer.stop()
-						led_sequence.timer.reset()
-						print('\n======== END Search Mode ========\n')
-						print('\n======== BEGIN Search Battery Test Mode ========\n')
+		# Check and handle button events
+		if button_event_buffer:
+			temp_button_event_buffer = list(button_event_buffer)
+			button_event_buffer = []
+
+			# Handle button presses
+			for packet in temp_button_event_buffer:
+				button_name = packet[0]
+				event_state = packet[1]
+				event_time = packet[2]
+
+				if event_state == 0:
+					# Down Press
+					print('\nDown Press', button_name)
+					if button_name == 'P23':
+						# MODE button
+						long_press_timer.start()
+						search_mode_timer.stop()
+						search_mode_timer.reset()
+						# TOGGLE Search Mode and Search Battery Test Mode
+						if not SearchBatteryTestModeFlag:
+							print('\nENTER Search Battery Test Mode')
+							SearchBatteryTestModeFlag = True
+							battery_mode_timer.start()
+							led_sequence.timer.stop()
+							led_sequence.timer.reset()
+							print('\n======== END Search Mode ========\n')
+							print('\n======== BEGIN Search Battery Test Mode ========\n')
+						else:
+							print('\nENTER Search Mode')
+							SearchBatteryTestModeFlag = False
+							battery_mode_timer.stop()
+							battery_mode_timer.reset()
+							search_mode_timer.start()
+							led_sequence.timer.start()
+							print('\n======== END Search Battery Test Mode ========\n')
+							print('\n======== BEGIN Search Mode ========\n')
 					else:
-						print('\nENTER Search Battery Test Mode')
-						SearchBatteryTestModeFlag = False
-						battery_mode_timer.stop()
-						battery_mode_timer.reset()
-						search_mode_timer.start()
-						led_sequence.timer.start()
-						print('\n======== END Search Battery Test Mode ========\n')
-						print('\n======== BEGIN Search Mode ========\n')
-				else:
-					# Any other button
-					print('search_mode_timer', search_mode_timer.read(), 's.')
-					search_mode_timer.reset()
-					print('search_mode_timer after reset', search_mode_timer.read(), 's.')
-					if SearchBatteryTestModeFlag:
-						print('\nENTER Search Battery Test Mode')
-						SearchBatteryTestModeFlag = False
-						battery_mode_timer.stop()
-						battery_mode_timer.reset()
-						search_mode_timer.start()
-						led_sequence.timer.start()
-						print('\n======== END Search Battery Test Mode ========\n')
-						print('\n======== BEGIN Search Mode ========\n')
-
-			elif ButtEventDict[button] == 3:
-				# Up Press
-				print('\nUp Press', button)
-				ButtEventDict[button] = 0
-				if button == 'P23':
-					# MODE button
-					if long_press_timer.read() > LongPressTimeoutDuration:
-						print('\nLong press detected at', long_press_timer.read(), 's.')
-						long_press_timer.stop()
-						long_press_timer.reset()
-						# ENTER Sleep Mode with Power Off Sequence
-						print('\n======== END Search Mode ========\n')
-						print('\n======== BEGIN Power Off Sequence Mode ========\n')
-						led_sequence.timer.start()
-						mode = 'PoweringDownMode'
-					else:
-						long_press_timer.stop()
-						print('\nLong press NOT detected at', long_press_timer.read(), 's.')
-						long_press_timer.reset()
-
+						# Any other button
 						print('search_mode_timer', search_mode_timer.read(), 's.')
 						search_mode_timer.reset()
 						print('search_mode_timer after reset', search_mode_timer.read(), 's.')
-				else:
-					# Any other button
-					print('search_mode_timer', search_mode_timer.read(), 's.')
-					search_mode_timer.reset()
-					print('search_mode_timer after reset', search_mode_timer.read(), 's.')
+						if SearchBatteryTestModeFlag:
+							print('\nENTER Search Battery Test Mode')
+							SearchBatteryTestModeFlag = False
+							battery_mode_timer.stop()
+							battery_mode_timer.reset()
+							search_mode_timer.start()
+							led_sequence.timer.start()
+							print('\n======== END Search Battery Test Mode ========\n')
+							print('\n======== BEGIN Search Mode ========\n')
 
-		if wlan.isconnected():
+				elif event_state == 1:
+					# Up Press
+					print('\nUp Press', button_name)
+					if button_name == 'P23':
+						# MODE button
+						if long_press_timer.read() > LongPressTimeoutDuration:
+							print('\nLong press detected at', long_press_timer.read(), 's.')
+							long_press_timer.stop()
+							long_press_timer.reset()
+							# ENTER Sleep Mode with Power Off Sequence
+							print('\n======== END Search Mode ========\n')
+							print('\n======== BEGIN Power Off Sequence Mode ========\n')
+							mode = 'PoweringDownMode'
+							led_sequence.timer.stop()
+							led_sequence.timer.reset()
+							led_sequence.timer.start()
+						else:
+							long_press_timer.stop()
+							print('\nLong press NOT detected at', long_press_timer.read(), 's.')
+							long_press_timer.reset()
+
+							print('search_mode_timer', search_mode_timer.read(), 's.')
+							search_mode_timer.stop()
+							search_mode_timer.reset()
+							search_mode_timer.start()
+							print('search_mode_timer after reset', search_mode_timer.read(), 's.')
+					else:
+						# Any other button
+						print('search_mode_timer', search_mode_timer.read(), 's.')
+						search_mode_timer.stop()
+						search_mode_timer.reset()
+						search_mode_timer.start()
+						print('search_mode_timer after reset', search_mode_timer.read(), 's.')
+
+		# When wifi connection is established attempt to connect socket to main server
+		if wlan.isconnected() and mode != 'PoweringDownMode':
 
 			if not SocketConnectedFlag:
-				# Create and connect a socket
-				try:
-					# Create an AF_INET, STREAM socket (TCP)
-					sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-					print('Socket Created')
 
-				except OSError as err:
-					print("create_socket OS error:", err)
-					print('Failed to create socket.')
-					time.sleep_ms(500)
-					machine.reset()
+				if not socketCreatedFlag:
+					# Create and connect a socket
+					try:
+						# Create an AF_INET, STREAM socket (TCP)
+						sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+						# print('Socket Created', time.ticks_us()/1000, 'ms:')
+						socketCreatedFlag = True
+						SearchBatteryTestModeFlag = False
+						led_sequence.timer.start()
+						search_mode_timer.start()
+
+					except OSError as err:
+						print("create_socket OS error:", err)
+						print('Failed to create socket.')
+						time.sleep_ms(500)
+						machine.reset()
 
 				try:
 					sock.connect((HOST, PORT))
@@ -339,15 +617,22 @@ while 1:
 					SocketConnectedFlag = True
 
 				except OSError as err:
-					print("connect_socket OS error:", err)
-					print('Failed to connect to ' + HOST)
+					# print("connect_socket OS error:", err)
+					# print('Failed to connect to ' + HOST, ': socketCreatedCount', socketCreatedCount)
 					sock.close()
-					del sock
+					socketCreatedCount += 1
+					if socketCreatedCount > 5:
+						socketCreatedCount = 0
+						socketCreatedFlag = False
+						# print('Kick New Socket Creation', time.ticks_us()/1000, 'ms:')
 
 			if SocketConnectedFlag:
 				SocketConnectedFlag = False
+				PtpSocketCreatedFlag = False
+				PtpSocketConnectedFlag = False
 
 				mode = 'DiscoveredMode'
+
 				long_press_timer.stop()
 				long_press_timer.reset()
 				search_mode_timer.stop()
@@ -356,6 +641,7 @@ while 1:
 				battery_mode_timer.reset()
 				led_sequence.timer.stop()
 				led_sequence.timer.reset()
+
 				ip, mask, gateway, dns = wlan.ifconfig()
 				print('IP address: ', ip)
 				print('Netmask:    ', mask)
@@ -367,6 +653,10 @@ while 1:
 				print('\n======== BEGIN Discovered Mode ========\n')
 				ReceiverDiscoveredFlag = True
 
+				# Rebuild fresh json tree
+				led_sequence.all_off()
+				JsonTreeDict = build_json_tree(LedDict, ButtDict, LedInfoDict, ButtonInfoDict, commandFlagList)
+
 	elif mode == 'DiscoveredMode':
 		ReceiverDiscoveredFlag = led_sequence.receiver_discovered(ReceiverDiscoveredFlag)
 
@@ -377,15 +667,23 @@ while 1:
 				mode = 'TransferMode'
 				print('\n======== END Discovered Mode ========\n')
 				print('\n======== BEGIN Transfer Mode ========\n')
+				led_sequence.timer.stop()
+				led_sequence.timer.reset()
+				led_sequence.timer.start()
 				# TODO: add thread here to transfer file with TransferFilesCompleteFlag
 			else:
 				mode = 'ConnectedMode'
 				print('\n======== END Discovered Mode ========\n')
 				print('\n======== BEGIN Connected Modes ========\n')
+				connected_mode_power_down_timer.stop()
+				connected_mode_power_down_timer.reset()
+				connected_mode_power_down_timer.start()
+				led_sequence.timer.stop()
+				led_sequence.timer.reset()
 
 	elif mode == 'TransferMode':
 		led_sequence.file_transfer(1)
-		# TODO: should this sequence finish one cycle before moving on?
+		# TODO: should this sequence finish one cycle before moving on? YES
 
 		if TransferFilesCompleteFlag and led_sequence.transfer_cycle_flag:
 			TransferFilesCompleteFlag = False
@@ -396,25 +694,238 @@ while 1:
 			mode = 'ConnectedMode'
 			print('\n======== END Transfer Mode ========\n')
 			print('\n======== BEGIN Connected Modes ========\n')
+			connected_mode_power_down_timer.stop()
+			connected_mode_power_down_timer.reset()
+			connected_mode_power_down_timer.start()
 
 	elif mode == 'ConnectedMode':
-
-		# Handle button events
-		button_events_string = handle_button_event(ButtEventDict, KeyMapDict)
-
-		# Send button events to server
-		sock, mode = send_button_events(sock, button_events_string, mode)
+		# print('\nConnectedMode')
+		# print('\nnConnectedMode start', time.ticks_us() / 1000, 'ms:')
+		'''
+		# connected_mode_power_down_timer checks
+		if connected_mode_power_down_timer.read() > ConnectedPowerDownTimeoutDuration:
+			print('\nconnected_mode_power_down_timer triggered at ', connected_mode_power_down_timer.read(), 's.')
+			connected_mode_power_down_timer.stop()
+			connected_mode_power_down_timer.reset()
+			# ENTER Sleep Mode
+			print('ENTER deep sleep\n')
+			ptp_sock.close()
+			machine.deepsleep()
+		elif (
+				connected_mode_power_down_timer.read() > ConnectedDarkTimeoutDuration
+				and not darkFlag and not JsonTreeDict['command_flags']['get_rssi']
+				and not JsonTreeDict['command_flags']['send_blocks']):
+			print('\nconnected_mode_dark_timer triggered at ', connected_mode_power_down_timer.read(), 's.')
+			led_sequence.all_off()
+			darkFlag = True
+		'''
 
 		# Check for data
-		sock, data, mode = check_receive(sock, mode)
+		sock, data, mode, socketCreatedFlag = check_receive(sock, mode, socketCreatedFlag, print_flag=printFlag)
 
-		# Check effect of received data
+		# Parse and handle incoming data
+		if data:
+			# Format data
+			tic = time.ticks_us() / 1000
+			if printFlag:
+				print('Data START', tic, 'ms')
+
+			if block_presses_flag:
+				block_presses_flag = False
+				led_sequence.set_led_dict_values(led_dict_values)
+
+			need_acknowledgement_flag = False
+			acknowledgement_count = 0
+
+			index_list = find_substrings(data, 'JSON_FRAGMENT', print_flag=printFlag)
+			fragment_list = slice_fragments(data, index_list)
+			for fragment_index, fragment in enumerate(fragment_list):
+				fragment_list[fragment_index] = convert_to_json_format(fragment)
+
+			# Process data
+			for fragment in fragment_list:
+				if not battery_strength_display and not signal_strength_thread_flag and not signal_strength_display:
+					LedDict = check_led_data(fragment, LedDict, print_flag=False)
+					JsonTreeDict = check_command_flags(fragment, JsonTreeDict, commandFlagList, print_flag=False)
+
+			toc = time.ticks_us() / 1000
+			if printFlag:
+				print('\nData Processed', toc, 'ms, Dif Proc', toc - tic, 'ms')
+		else:
+			if need_acknowledgement_flag:
+				if acknowledgement_count >= 3 and not block_presses_flag:  # This waits around 200ms before triggering
+					acknowledgement_count = 0
+					need_acknowledgement_flag = False
+					block_presses_flag = True
+					print('\nNo ACK received', time.ticks_us() / 1000, 'ms')
+					led_dict_values = led_sequence.get_led_dict_values()
+					led_sequence.all_on()
+				else:
+					acknowledgement_count += 1
+
+		# React to get_rssi (Test mode 1)
+		if JsonTreeDict['command_flags']['get_rssi'] and not block_presses_flag:
+			if startRssiThreadFlag:
+				startRssiThreadFlag = False
+				rssiThreadRunning = True
+				start_new_thread(get_rssi_thread, [wlan])
+				print('after thread start', time.ticks_us() / 1000, 'ms: rssi =', rssi)
+
+			if not rssiThreadRunning and rssi is not None:
+				json_string_fragment = build_rssi_json_string_fragment(rssi)
+				need_acknowledgement_flag, sock, mode = send_events(sock, json_string_fragment, mode)
+				print('rssi sent', time.ticks_us() / 1000, 'ms')
+				startRssiThreadFlag = True
+
+		# React to send_blocks (Test mode 2)
+		send_blocks = JsonTreeDict['command_flags']['send_blocks']
+		if send_blocks:
+			if startRssiForSendBlocksThreadFlag:
+				startRssiForSendBlocksThreadFlag = False
+				rssiThreadRunning = True
+				sendBlocksFlag = True
+				start_new_thread(get_rssi_thread, [wlan])
+				print('after thread start', time.ticks_ms(), 'rssi =', rssi)
+
+			if not rssiThreadRunning and rssi is not None and not rssiSentForSendBlocks:
+				rssiSentForSendBlocks = True
+				json_string_fragment = build_rssi_json_string_fragment(rssi)
+				need_acknowledgement_flag, sock, mode = send_events(sock, json_string_fragment, mode)
+				print('rssi sent', time.ticks_ms())
+				print('Start send_blocks')
+				start_new_thread(send_blocks_thread, [])
+				print('after thread start', time.ticks_ms())
+
+			if not startRssiForSendBlocksThreadFlag and rssiSentForSendBlocks and not sendBlocksFlag:
+				JsonTreeDict['command_flags']['send_blocks'] = False
+				print('Test 2 Done in main loop')
+				button_event_buffer.append(
+					('P23', 1, time.ticks_us() - offset))  # Pretend mode was pressed up to trigger close on RD
+				connected_mode_power_down_timer.stop()
+				connected_mode_power_down_timer.reset()
+				connected_mode_power_down_timer.start()
+		else:
+			startRssiForSendBlocksThreadFlag = True
+			rssiSentForSendBlocks = False
+			sendBlocksFlag = False
+
+		# React to receiver_rssi event  (Test mode 4)
+		if JsonTreeDict['command_flags']['receiver_rssi']:
+			JsonTreeDict['command_flags']['receiver_rssi'] = False
+			print('\nreceiver_rssi flag received')
+
+		# React to power_down event
+		if JsonTreeDict['command_flags']['power_down']:
+			print('\n======== END Connected Modes ========\n')
+			print('\n======== BEGIN Power Off Sequence Mode ========\n')
+			mode = 'PoweringDownMode'
+			led_sequence.timer.stop()
+			led_sequence.timer.reset()
+			led_sequence.timer.start()
+
+		# React to signal_strength_display event
+		if JsonTreeDict['command_flags']['signal_strength_display']:
+			JsonTreeDict['command_flags']['signal_strength_display'] = False
+			print('\nsignal_strength_display activated')
+			signal_strength_thread_flag = True
+			LedDict['P10'].value(True)
+			LedDict['P11'].value(True)
+			rssiThreadRunning = True
+			start_new_thread(get_rssi_thread, [wlan])
+			print('after thread start', time.ticks_ms(), 'rssi =', rssi)
+
+		# React to signal_strength_thread ending
+		if signal_strength_thread_flag and not JsonTreeDict['command_flags']['battery_strength_display'] and not battery_strength_display:
+			if not rssiThreadRunning:
+				signal_strength_thread_flag = False
+				signal_strength_display = True
+				if rssi is not None:
+					led_sequence.signal_test(enable=True, on_off=signal_strength_display, rssi=rssi)
+				print('\nsignal_strength_display start', time.ticks_us() / 1000, 'ms')
+
+		# React to signal_strength_display timing out
+		if signal_strength_display and not JsonTreeDict['command_flags']['battery_strength_display'] and not battery_strength_display:
+			if signal_strength_display_count >= 50:  # Measured once to take 2.922s
+				signal_strength_display_count = 0
+				signal_strength_display = False
+				led_sequence.signal_test(enable=True, on_off=signal_strength_display, rssi=rssi)
+				print('\nsignal_strength_display stop', time.ticks_us() / 1000, 'ms')
+			else:
+				signal_strength_display_count += 1
+
+		# React to battery_strength_display event
+		if JsonTreeDict['command_flags']['battery_strength_display']:
+			JsonTreeDict['command_flags']['battery_strength_display'] = False
+			print('\nbattery_strength_display activated')
+			signal_strength_thread_flag = False
+			signal_strength_display = False
+			battery_strength_display = True
+			led_sequence.battery_test(enable=True, on_off=battery_strength_display)
+			print('\nbattery_strength_display start', time.ticks_us() / 1000, 'ms')
+
+		# React to battery_strength_display timing out
+		if battery_strength_display:
+			if battery_strength_display_count >= 50:  # Measured once to take 2.922s
+				battery_strength_display_count = 0
+				battery_strength_display = False
+				led_sequence.battery_test(enable=True, on_off=battery_strength_display)
+				print('\nbattery_strength_display stop', time.ticks_us() / 1000, 'ms')
+			else:
+				battery_strength_display_count += 1
+
+		# Run ptp server if connected
+		if ptp_thread_flag and not PtpSocketConnectedFlag:
+			# Create and connect a socket
+			if not PtpSocketCreatedFlag:
+				try:
+					# Create an AF_INET, STREAM socket (TCP)
+					ptp_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+					print('PTP Socket Created', time.ticks_us() / 1000, 'ms')
+					PtpSocketCreatedFlag = True
+
+				except OSError as err:
+					print("create_socket OS error:", err)
+					print('Failed to create socket.')
+					machine.reset()
+
+			else:
+				try:
+					ptp_sock.connect((HOST, PTP_PORT))
+					ptp_sock.setblocking(0)
+					print('PTP Socket Connected to ' + HOST + ' on port ' + str(PTP_PORT))
+					PtpSocketConnectedFlag = True
+
+				except OSError as err:
+					print("connect_socket OS error:", err)
+					print('Failed to connect to ' + HOST, ': PtpSocketCreatedCount', PtpSocketCreatedCount)
+					ptp_sock.close()
+					PtpSocketCreatedCount += 1
+					if PtpSocketCreatedCount > 3:
+						PtpSocketCreatedCount = 0
+						PtpSocketCreatedFlag = False
+						print('Kick New PTP Socket Creation', time.ticks_us() / 1000, 'ms')
 
 		# Check connection to wifi and reconnect
-		if not wlan.isconnected():
+		if not wlan.isconnected() and not JsonTreeDict['command_flags']['power_down']:
 			mode = 'SearchModes'
+			print('!!!!!!!!!!not wlan.isconnected()!!!!!!!!!!!')
+
+			long_press_timer.stop()
+			long_press_timer.reset()
+			search_mode_timer.stop()
+			search_mode_timer.reset()
+			battery_mode_timer.stop()
+			battery_mode_timer.reset()
+			led_sequence.timer.stop()
+			led_sequence.timer.reset()
+
+			search_mode_timer.start()
+			led_sequence.timer.start()
+
 			print('\n======== END Connected Modes ========\n')
 			print('\n======== BEGIN Search Modes ========\n')
+
+		# print('\nConnectedMode END', time.ticks_us() / 1000, 'ms:')
 
 	elif mode == 'PoweringDownMode':
 		PowerOffSequenceFlag = led_sequence.power_off(PowerOffSequenceFlag)
@@ -426,6 +937,13 @@ while 1:
 
 	elif mode == 'SleepMode':
 		print('ENTER deep sleep\n')
+
+		try:
+			ptp_sock.close()
+			sock.close()
+		except:
+			pass
+
 		machine.deepsleep()
 	else:
 		print('ERROR - no mode selected area should never be entered')
